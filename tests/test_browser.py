@@ -59,6 +59,9 @@ class BrowserBoundaryTests(unittest.TestCase):
         self.assertEqual(raised.exception.diagnostics["browser_mode"], "headed")
         self.assertNotIn("SECRET", json.dumps(raised.exception.diagnostics))
         context.close.assert_called_once()
+        page.goto.assert_called_once_with(
+            PORTAL_URL, wait_until="domcontentloaded", timeout=1000
+        )
         self.assertFalse(
             playwright.chromium.launch_persistent_context.call_args.kwargs["headless"]
         )

@@ -181,7 +181,7 @@ def browser_run(
                 page.on("pageerror", capture.observe_page_error)
                 try:
                     page.goto(
-                        portal_url(portal_path),
+                        PORTAL_URL,
                         wait_until="domcontentloaded", timeout=request_seconds * 1000
                     )
                 except PlaywrightError:
