@@ -1,10 +1,15 @@
 import unittest
+import json
+import types
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from provadis_m1.browser import API_URL, PORTAL_URL, PortalCapture, direct_fetch, portal_url
+from provadis_m1.browser import (
+    API_URL, PORTAL_URL, PortalCapture, browser_run, direct_fetch, portal_url,
+)
 from provadis_m1.errors import (
-    AuthenticationError, ConfigurationError, InvalidResponse, NetworkError, ServiceError,
+    AuthenticationError, BootstrapError, ConfigurationError, InvalidResponse, NetworkError,
+    ServiceError,
 )
 
 VALID = (Path(__file__).parent / "fixtures" / "valid.json").read_bytes()
@@ -15,6 +20,49 @@ class SyntheticPlaywrightError(Exception):
 
 
 class BrowserBoundaryTests(unittest.TestCase):
+    def test_missing_request_is_unknown_bootstrap_not_confirmed_auth_failure(self):
+        with self.assertRaises(BootstrapError) as raised:
+            PortalCapture().require_bearer()
+        self.assertEqual(raised.exception.code, 8)
+
+    def test_diagnostics_never_export_url_header_or_error_text(self):
+        capture = PortalCapture(bearer="Bearer SECRET")
+        capture.observe_page_error(RuntimeError("SECRET"))
+        for url, expected in (
+            (PORTAL_URL + "?code=SECRET#token=SECRET", "portal"),
+            ("https://ishgroupb2c.b2clogin.com/path?code=SECRET", "identity_provider"),
+            ("https://example.invalid/SECRET", "other"),
+            ("about:blank", "blank"),
+        ):
+            result = capture.diagnostics(url, headed=False)
+            self.assertEqual(result["final_location"], expected)
+            self.assertEqual(result["page_error_count"], 1)
+            self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_bootstrap_failure_retains_diagnostics_and_closes_browser(self):
+        page = Mock(url="https://ishgroupb2c.b2clogin.com/?code=SECRET")
+        context = Mock(pages=[page])
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        manager = Mock()
+        manager.__enter__ = Mock(return_value=playwright)
+        manager.__exit__ = Mock(return_value=False)
+        module = types.ModuleType("playwright.sync_api")
+        module.Error = SyntheticPlaywrightError
+        module.sync_playwright = Mock(return_value=manager)
+        with patch.dict("sys.modules", {"playwright.sync_api": module}):
+            with self.assertRaises(BootstrapError) as raised:
+                browser_run(Path("unused-synthetic-profile"), interactive=False,
+                            bootstrap_seconds=0, request_seconds=1, samples=1,
+                            sample_interval=0, headed=True)
+        self.assertEqual(raised.exception.diagnostics["final_location"], "identity_provider")
+        self.assertEqual(raised.exception.diagnostics["browser_mode"], "headed")
+        self.assertNotIn("SECRET", json.dumps(raised.exception.diagnostics))
+        context.close.assert_called_once()
+        self.assertFalse(
+            playwright.chromium.launch_persistent_context.call_args.kwargs["headless"]
+        )
+
     def request(self, url=API_URL, method="GET", bearer="Bearer SYNTHETIC-NOT-A-CREDENTIAL"):
         request = Mock(url=url, method=method)
         request.header_value.return_value = bearer

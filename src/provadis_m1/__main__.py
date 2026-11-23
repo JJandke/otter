@@ -1,6 +1,7 @@
 """Run with PYTHONPATH=src python -m provadis_m1; stdout is sanitized JSON only."""
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -27,7 +28,7 @@ def _interval(value: str) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    cli = argparse.ArgumentParser(description="Provadis M1 authentication feasibility only")
+    cli = argparse.ArgumentParser(description="OTTER M1 authentication feasibility only")
     cli.add_argument("command", choices=("login", "fetch", "verify"))
     cli.add_argument("--state-dir", type=Path, default=Path(".m1-state"))
     cli.add_argument("--bootstrap-seconds", type=_positive, default=None)
@@ -35,6 +36,7 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--samples", type=_positive, default=1)
     cli.add_argument("--sample-interval", type=_interval, default=0)
     cli.add_argument("--portal-path", default="/", help="Confirmed same-origin timetable route")
+    cli.add_argument("--headed", action="store_true", help="Visible fetch for diagnosis; not verify")
     return cli
 
 
@@ -47,7 +49,10 @@ def main(argv: list[str] | None = None) -> int:
         if any(os.environ.get(key) for key in ("DEBUG", "PWDEBUG", "SSLKEYLOGFILE")):
             raise ConfigurationError("disable_browser_debug_and_tls_key_logging")
         portal_url(args.portal_path)
+        if args.headed and args.command == "verify":
+            raise ConfigurationError("verify_requires_headless_browsers")
         with private_state(args.state_dir) as profile:
+            result["state_id"] = hashlib.sha256(str(profile.resolve()).encode()).hexdigest()[:12]
             interactive = args.command == "login"
             if interactive:
                 print(
@@ -66,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
                     samples=max(2, args.samples) if args.command == "verify" else args.samples,
                     sample_interval=args.sample_interval,
                     portal_path=args.portal_path,
+                    headed=args.headed,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()
@@ -75,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
                 result["unattended_retrieval_demonstrated"] = True
     except M1Error as error:
         result.update({"category": error.category, "reason": error.reason})
+        if error.diagnostics is not None:
+            result["diagnostics"] = error.diagnostics
         code = int(error.code)
     except OSError:
         result.update({"category": "configuration", "reason": "local_io_failed"})

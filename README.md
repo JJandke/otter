@@ -1,11 +1,15 @@
-# Provadis timetable — M1
+# OTTER — Organised Timetable Translation and Event Retrieval
+
+Milestone M1: project foundation and authentication feasibility.
 
 An isolated Python prototype for **authentication feasibility**, with no calendar,
 database, public endpoint, or production job. It leaves the old application and
 existing Nginx/systemd configuration alone.
 
-**Status:** offline tests pass on Python 3.12. Live authentication, session restart
-reuse, unattended access, and server behavior have not yet been demonstrated.
+**Status:** the owner reported a validated live login response with 82 events on
+23 November 2026. Subsequent fetch/restart attempts failed to obtain a timetable
+Bearer request, including a run using `/#/student/schedule`. Session restart
+reuse, unattended access, and server behavior remain unproven.
 Do not treat M1 as accepted until the live checks in
 [docs/feasibility.md](docs/feasibility.md) have recorded successful results.
 
@@ -76,12 +80,13 @@ excluded from Git. Only one process can use it at a time.
 | Exit | Category | Meaning |
 | --- | --- | --- |
 | 0 | `validated_snapshot` | Every requested direct API sample passed validation |
-| 2 | `authentication` | Missing Bearer request, HTTP 401/403, or unexpected redirect |
+| 2 | `authentication` | HTTP 401/403, unexpected API redirect, or browser closed during authentication |
 | 3 | `network` | Portal navigation, API transport, or response read failed |
 | 4 | `invalid_response` | Wrong status/content/schema/dates, `ok != true`, or count mismatch |
 | 5 | `suspicious_response` | Structurally valid but empty timetable; no successful update |
 | 6 | `configuration` | Unsafe/locked state, missing dependencies/browser/display, local error |
 | 7 | `service` | HTTP 429 or 5xx; upstream temporarily unavailable |
+| 8 | `bootstrap` | No usable timetable Bearer observed; authentication state is unknown |
 | 130 | `interrupted` | Operator stopped the run |
 
 HTTP 403 may mean insufficient permissions rather than expired login. A missing
@@ -98,6 +103,7 @@ university returned a semantically complete timetable.
 
 ## Next steps
 
+- [Development workflow, tests, rollback, and restart diagnosis](docs/development.md)
 - [Authentication and reauthentication](docs/authentication.md)
 - [Safe SSH-only server testing](docs/server-testing.md)
 - [Feasibility assessment and acceptance evidence](docs/feasibility.md)

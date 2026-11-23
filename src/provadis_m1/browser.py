@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from .errors import AuthenticationError, ConfigurationError, InvalidResponse, NetworkError
+from .errors import (
+    AuthenticationError, BootstrapError, ConfigurationError, InvalidResponse, M1Error, NetworkError,
+)
 from .validation import MAX_RESPONSE_BYTES, ValidatedSnapshot, validate_http, validate_response
 
 PORTAL_URL = "https://hvsweb.provadis-hochschule.de/"
@@ -36,6 +38,33 @@ class PortalCapture:
     token_endpoint_requests: int = 0
     last_api_status: int | None = None
     api_transport_failed: bool = False
+    page_errors: int = 0
+
+    def observe_page_error(self, _error: Any) -> None:
+        # Count only: JavaScript error messages/stacks may contain sensitive data.
+        self.page_errors += 1
+
+    def diagnostics(self, final_url: str, *, headed: bool) -> dict[str, Any]:
+        parsed = urlsplit(final_url)
+        if parsed.hostname == urlsplit(PORTAL_URL).hostname:
+            location = "portal"
+        elif parsed.hostname == IDENTITY_HOST:
+            location = "identity_provider"
+        elif final_url == "about:blank":
+            location = "blank"
+        else:
+            location = "other"
+        return {
+            "browser_mode": "headed" if headed else "headless",
+            "final_location": location,
+            "portal_api_requests_observed": self.api_requests,
+            "last_portal_api_status": self.last_api_status,
+            "portal_api_transport_failed": self.api_transport_failed,
+            "identity_requests_observed": self.identity_requests,
+            "token_endpoint_requests_observed": self.token_endpoint_requests,
+            "page_error_count": self.page_errors,
+            "timetable_bearer_observed": self.bearer is not None,
+        }
 
     def observe(self, request: Any) -> None:
         """Never capture arbitrary Authorization headers, URLs, bodies, or cookies."""
@@ -73,7 +102,7 @@ class PortalCapture:
             validate_http(self.last_api_status, "application/json")
         if self.api_transport_failed:
             raise NetworkError("portal_timetable_request_failed")
-        raise AuthenticationError("portal_did_not_issue_timetable_bearer")
+        raise BootstrapError()
 
 
 def direct_fetch(context: Any, bearer: str, timeout_ms: int, pw_error: type) -> ValidatedSnapshot:
@@ -117,6 +146,7 @@ def browser_run(
     samples: int,
     sample_interval: int,
     portal_path: str = "/",
+    headed: bool = False,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
     try:
@@ -126,12 +156,13 @@ def browser_run(
         raise ConfigurationError("playwright_not_installed") from None
 
     capture = PortalCapture()
+    visible = interactive or headed
     try:
         with sync_playwright() as playwright:
             try:
                 context = playwright.chromium.launch_persistent_context(
                     str(profile),
-                    headless=not interactive,
+                    headless=not visible,
                     channel="chromium",
                     chromium_sandbox=True,
                     accept_downloads=False,
@@ -139,11 +170,13 @@ def browser_run(
                 )
             except PlaywrightError:
                 raise ConfigurationError("browser_launch_failed") from None
+            page = None
             try:
                 context.on("request", capture.observe)
                 context.on("response", capture.observe_response)
                 context.on("requestfailed", capture.observe_failed)
                 page = context.pages[0] if context.pages else context.new_page()
+                page.on("pageerror", capture.observe_page_error)
                 try:
                     page.goto(
                         portal_url(portal_path),
@@ -171,6 +204,7 @@ def browser_run(
                     )
                     counts.append(snapshot.event_count)
                 return {
+                    "diagnostics": capture.diagnostics(page.url, headed=visible),
                     "direct_api_samples": len(counts),
                     "event_counts": counts,
                     "portal_bootstrap_used": True,
@@ -181,6 +215,11 @@ def browser_run(
                         capture.identity_requests - identity_before_direct
                     ),
                 }
+            except M1Error as error:
+                error.diagnostics = capture.diagnostics(
+                    page.url if page is not None else "about:blank", headed=visible
+                )
+                raise
             finally:
                 capture.bearer = None
                 context.close()

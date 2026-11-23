@@ -1,5 +1,10 @@
 # Authentication and reauthentication
 
+For a successful login followed by failed fetch/verify, first follow
+[restart diagnosis](development.md). A missing observed timetable request now
+uses category `bootstrap`, exit 8, with safe diagnostics. It does not establish
+that login expired. Keep the existing profile intact while investigating.
+
 ## What this prototype does
 
 1. Acquire a nonblocking process lock on a private, marked M1 state directory.

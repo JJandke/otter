@@ -1,17 +1,20 @@
 # M1 feasibility assessment
 
-**Assessment on 23 November 2026: not established yet.** The implementation is
-ready for controlled live testing; the authentication acceptance gates remain
-open. Offline tests must not be mistaken for a successful university API fetch.
+**Assessment on 23 November 2026: partially demonstrated by the owner.**
+Interactive login and a direct API GET validated 82 events. Subsequent headless
+fetch and verify attempts did not obtain a timetable Bearer request, including
+an attempt with `/#/student/schedule`. The cause is still unknown; session reuse
+and unattended operation remain open acceptance gates. See
+[the diagnostic workflow](development.md) for the evidence and next tests.
 
 ## Evidence and acceptance gates
 
 | Requirement | Evidence available | Status |
 | --- | --- | --- |
 | Clean isolated Python project with Git | New `main` repository, Python 3.12.14 venv, pinned dependency closure | Implemented locally |
-| Public GitHub repository | No remote repository/push confirmed | Pending |
-| Valid authenticated API response | Synthetic fixture and response boundary tests only | **Not demonstrated live** |
-| Session reuse after restart | `verify` requires two separate headless browser lifetimes; orchestration tested with mocks | **Not demonstrated live** |
+| GitHub repository | Owner checkout has origin `https://github.com/JJandke/otter` | Remote configured; publication/CI not independently verified |
+| Valid authenticated API response | Owner-reported `login` summary: 82 validated events, one direct sample | **Demonstrated in the owner's local run** |
+| Session reuse after restart | Owner's headless `fetch` and `verify` failed to observe a timetable Bearer request | **Not demonstrated; diagnosis required** |
 | Unattended retrieval | `fetch`/`verify` do not ask for input or automate MFA | **Not demonstrated live** |
 | Direct retrieval without repeated full UI navigation | Direct GET function tested; same-process samples need no extra navigation; each fresh process still bootstraps the portal | Partially implemented; live behavior open |
 | Credential/session protection | In-memory Bearer, private profile/lock, safe summaries, ignore rules, publication guard | Implemented; human review still required |
@@ -25,7 +28,8 @@ The project brief confirms the portal and fixed authenticated GET endpoint, the
 response envelope/known event fields, explicit date offsets, the Bearer header,
 and Entra B2C host/policy `b2c_1a_hvs_signup_signin`. It reports an observed
 authorization-code/PKCE and refresh-token flow. These facts have not been
-independently re-demonstrated by this implementation.
+independently re-demonstrated by the assistant; the owner has now demonstrated
+interactive direct retrieval using this implementation.
 
 No original code archive is necessary for a new isolated M1 prototype. No HAR,
 token, or old-app file was imported into the repository. The exact timetable SPA
