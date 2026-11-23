@@ -58,17 +58,22 @@ body. It does not export or independently renew refresh tokens.
 two direct requests in each. Success demonstrates short-term restart reuse and
 unattended retrieval on that host. It does not establish long-term validity.
 
-If the root page does not automatically request the timetable, supply the actual
-same-origin route in **each** command, for example:
+The default route is now the owner-confirmed `/student/schedule`. If it redirects
+to the landing page, OTTER clicks the exact visible `Für Studierende` entry once
+to start the portal's normal SSO flow. After a return to another student page,
+it waits two seconds and navigates to the schedule at most once. It never fills
+credentials or interacts with identity-provider forms. See
+[student-entry testing](docs/student-entry.md).
+
+You can still override the same-origin route explicitly:
 
 ```sh
-# Replace the example route with the route observed in your dedicated browser.
-./scripts/m1 fetch --portal-path '/#/example/timetable'
+./scripts/m1 fetch --portal-path '/student/schedule'
 ```
 
-The route is not established yet. Do not use an OAuth callback URL, query string,
+Do not use an OAuth callback URL, query string,
 authorization code, or token-bearing fragment. Only simple paths/hash routes are
-accepted. There is no click-selector automation guessing how the portal works.
+accepted. The only automatic click is the observed student-entry label.
 
 ## Results and failures
 

@@ -14,6 +14,7 @@ from .errors import (
     AuthenticationError, BootstrapError, ConfigurationError, InvalidResponse, M1Error, NetworkError,
 )
 from .validation import MAX_RESPONSE_BYTES, ValidatedSnapshot, validate_http, validate_response
+from .navigation import DEFAULT_PORTAL_PATH, StudentNavigation
 
 PORTAL_URL = "https://hvsweb.provadis-hochschule.de/"
 API_URL = "https://api.provadis-hochschule.de/api/v1/Student/GetEventList"
@@ -145,7 +146,7 @@ def browser_run(
     request_seconds: int,
     samples: int,
     sample_interval: int,
-    portal_path: str = "/",
+    portal_path: str = DEFAULT_PORTAL_PATH,
     headed: bool = False,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
@@ -156,6 +157,7 @@ def browser_run(
         raise ConfigurationError("playwright_not_installed") from None
 
     capture = PortalCapture()
+    navigation = StudentNavigation()
     visible = interactive or headed
     try:
         with sync_playwright() as playwright:
@@ -187,6 +189,13 @@ def browser_run(
 
                 deadline = time.monotonic() + bootstrap_seconds
                 while capture.bearer is None and time.monotonic() < deadline:
+                    remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+                    navigation.advance(
+                        page, portal_origin=PORTAL_URL, target_url=portal_url(portal_path),
+                        now=time.monotonic(),
+                        timeout_ms=min(request_seconds * 1000, remaining_ms),
+                        pw_error=PlaywrightError,
+                    )
                     try:
                         page.wait_for_timeout(200)
                     except PlaywrightError:
@@ -204,7 +213,10 @@ def browser_run(
                     )
                     counts.append(snapshot.event_count)
                 return {
-                    "diagnostics": capture.diagnostics(page.url, headed=visible),
+                    "diagnostics": {
+                        **capture.diagnostics(page.url, headed=visible),
+                        **navigation.diagnostics(),
+                    },
                     "direct_api_samples": len(counts),
                     "event_counts": counts,
                     "portal_bootstrap_used": True,
@@ -219,6 +231,7 @@ def browser_run(
                 error.diagnostics = capture.diagnostics(
                     page.url if page is not None else "about:blank", headed=visible
                 )
+                error.diagnostics.update(navigation.diagnostics())
                 raise
             finally:
                 capture.bearer = None

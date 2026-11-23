@@ -36,8 +36,10 @@ MFA. A successful direct request closes the window and prints sanitized JSON.
 
 If the portal requires a particular route, identify its simple path/hash route in
 this browser and use `--portal-path` in subsequent commands. OAuth callback URLs
-and URLs containing parameters are unsuitable. The default root route is an
-unverified assumption, not a confirmed portal navigation sequence.
+and URLs containing parameters are unsuitable. The default is `/student/schedule`.
+The owner confirmed that this route redirects to the landing page before the
+student flow is started. OTTER now tries the bounded navigation described in
+[student-entry testing](student-entry.md); its live success is still unproven.
 
 Then run `./scripts/m1 verify`. Both headless browser lifetimes must make valid,
 nonempty direct requests. Preserve the sanitized result locally if desired:

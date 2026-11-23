@@ -28,8 +28,8 @@ class AuthenticationError(M1Error):
 
 
 class BootstrapError(M1Error):
-    def __init__(self):
-        super().__init__("bootstrap", ExitCode.BOOTSTRAP, "portal_did_not_issue_timetable_bearer")
+    def __init__(self, reason: str = "portal_did_not_issue_timetable_bearer"):
+        super().__init__("bootstrap", ExitCode.BOOTSTRAP, reason)
 
 
 class NetworkError(M1Error):

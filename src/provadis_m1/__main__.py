@@ -11,6 +11,7 @@ from pathlib import Path
 from .browser import browser_run, portal_url
 from .errors import ConfigurationError, M1Error
 from .state import private_state
+from .navigation import DEFAULT_PORTAL_PATH
 
 
 def _positive(value: str) -> int:
@@ -35,7 +36,8 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--request-seconds", type=_positive, default=30)
     cli.add_argument("--samples", type=_positive, default=1)
     cli.add_argument("--sample-interval", type=_interval, default=0)
-    cli.add_argument("--portal-path", default="/", help="Confirmed same-origin timetable route")
+    cli.add_argument("--portal-path", default=DEFAULT_PORTAL_PATH,
+                     help="Same-origin timetable route (default: /student/schedule)")
     cli.add_argument("--headed", action="store_true", help="Visible fetch for diagnosis; not verify")
     return cli
 
