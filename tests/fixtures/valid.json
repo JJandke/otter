@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "message": "",
+  "message2": null,
+  "count": 2,
+  "data": [
+    {
+      "eventtitle": "Synthetic lecture A",
+      "startdate": "2027-03-26T09:00:00+01:00",
+      "enddate": "2027-03-26T10:30:00+01:00",
+      "buildingname": "Example building",
+      "roomname": "A101",
+      "instructorname": "Example Instructor",
+      "groupname": "EXAMPLE",
+      "datasource": "synthetic",
+      "personid": 123,
+      "email": "example@example.invalid"
+    },
+    {
+      "eventtitle": "Synthetic lecture B",
+      "startdate": "2027-03-29T09:00:00+02:00",
+      "enddate": "2027-03-29T10:30:00+02:00",
+      "buildingname": null,
+      "roomname": "",
+      "instructorname": null,
+      "groupname": "EXAMPLE",
+      "datasource": null,
+      "personid": null,
+      "email": null
+    }
+  ]
+}

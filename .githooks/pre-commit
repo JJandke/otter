@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if test -x .venv/bin/python; then
+  exec .venv/bin/python scripts/check_public_tree.py
+fi
+exec python3 scripts/check_public_tree.py
