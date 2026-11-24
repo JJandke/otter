@@ -42,7 +42,7 @@ and a fixed event name. Actions correspond to these exact configured selectors:
 | student_entry_clicked | Visible level-two heading `Für Studierende` |
 | sign_in_clicked | Button `Jetzt anmelden` |
 | student_sso_clicked | Dedicated button `Anmeldung für Studierende und Lehrende` |
-| my_studium_clicked | Unique visible exact text `My Studium` |
+| my_studium_clicked | Unique visible exact text `Mein Studium` |
 | timetable_link_clicked | Unique visible exact text `Stundenplan` |
 | portal_start | OTTER's initial portal navigation |
 | schedule_fallback | OTTER's direct timetable navigation after the stabilization delay |

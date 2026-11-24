@@ -151,7 +151,7 @@ class NavigationTests(unittest.TestCase):
         menu.filter.return_value.count.return_value = 1
         schedule.filter.return_value.count.return_value = 1
         page.get_by_text.side_effect = lambda label, **kw: {
-            'My Studium': menu, 'Stundenplan': schedule}[label]
+            'Mein Studium': menu, 'Stundenplan': schedule}[label]
         nav = StudentNavigation()
         self.advance(nav, page, 0)
         schedule.filter.return_value.click.assert_not_called()
@@ -218,3 +218,37 @@ class NavigationTests(unittest.TestCase):
             self.advance(nav, page)
         self.assertEqual(str(raised.exception), 'ambiguous_post_sso_student_entry')
         page.get_by_role.return_value.filter.return_value.click.assert_not_called()
+
+    def test_authenticated_dashboard_uses_german_label_then_timetable(self):
+        # Reproduce the owner's dashboard: no public student card, German study
+        # card, and a timetable item exposed after the study-card click.
+        page = self.page(count=0)
+        study, timetable, absent = Mock(), Mock(), Mock()
+        study.filter.return_value.count.return_value = 1
+        absent.filter.return_value.count.return_value = 0
+        timetable.filter.return_value.count.side_effect = lambda: int(nav.my_studium_clicked)
+        page.get_by_text.side_effect = lambda label, **kw: {
+            'Mein Studium': study, 'Stundenplan': timetable}.get(label, absent)
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        self.advance(nav, page)
+        self.assertTrue(nav.my_studium_clicked)
+        self.assertFalse(nav.timetable_link_clicked)
+        self.advance(nav, page, 1)
+        self.assertTrue(nav.timetable_link_clicked)
+        self.assertEqual([c.args[0] for c in page.get_by_text.call_args_list],
+                         ['Mein Studium', 'Stundenplan'])
+        study.filter.return_value.click.assert_called_once()
+        timetable.filter.return_value.click.assert_called_once()
+        page.goto.assert_not_called()
+        self.assertFalse(nav.post_sso_student_entry_clicked)
+
+    def test_multiple_visible_german_study_entries_fail_closed(self):
+        page = self.page(count=0)
+        page.get_by_text.return_value.filter.return_value.count.return_value = 2
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        with self.assertRaises(BootstrapError) as raised:
+            self.advance(nav, page)
+        self.assertEqual(str(raised.exception), 'ambiguous_my_studium')
+        page.get_by_text.return_value.filter.return_value.click.assert_not_called()

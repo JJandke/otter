@@ -11,7 +11,7 @@ The navigation log from 24 November 2026 contains this ordering:
 | 62–66 | 10.43–10.56 s | OTTER requests `/student/schedule` using the full-document fallback |
 | 68–69 | 10.89–10.96 s | Portal returns to `/` again |
 
-Neither `My Studium` nor `Stundenplan` was clicked and no timetable API request
+Neither `Mein Studium` nor `Stundenplan` was clicked and no timetable API request
 was observed. The first return to the landing page preceded the fallback; the
 fallback therefore cannot explain the entire failure. These events establish
 ordering, not successful authentication or the reason for a route guard rejecting
@@ -26,7 +26,7 @@ an explicit hypothesis, not a claim that session validity has been established.
 
 - Keep the original portal document alive after the SSO round trip: no `page.goto`
   timetable fallback, no longer delay guessed as an authentication signal.
-- Prefer the reported `My Studium` / `Stundenplan` menu controls when visible.
+- Prefer the reported `Mein Studium` / `Stundenplan` menu controls when visible.
 - If the landing page remains and the student SSO option was selected, allow one
   additional click on the visible `Für Studierende` card heading. Log it separately
   as `post_sso_student_entry_clicked`.

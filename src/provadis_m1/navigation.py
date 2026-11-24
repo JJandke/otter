@@ -98,7 +98,7 @@ class StudentNavigation:
         # selectors still need live verification; only unique visible matches click.
         if target.path == DEFAULT_PORTAL_PATH:
             if not self.my_studium_clicked and self._click_once(
-                page.get_by_text("My Studium", exact=True), "my_studium_clicked",
+                page.get_by_text("Mein Studium", exact=True), "my_studium_clicked",
                 timeout_ms, pw_error,
             ):
                 return
