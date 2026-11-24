@@ -60,8 +60,9 @@ unattended retrieval on that host. It does not establish long-term validity.
 
 The default route is now the owner-confirmed `/student/schedule`. If it redirects
 to the landing page, OTTER clicks the exact visible `Für Studierende` entry once
-to start the portal's normal SSO flow. After a return to another student page,
-it waits two seconds and navigates to the schedule at most once. It never fills
+to start the portal's normal SSO flow. After the SSO round trip it uses the reported student menus, or re-enters
+the visible student card once if the landing page remains. It no longer performs
+a full-document timetable reload. See [post-SSO routing](docs/post-sso.md). It never fills
 credentials or handles passkey/MFA/confirmation prompts. It clicks the public
 `Jetzt anmelden` button and the dedicated student SSO routing option; see
 [the complete SSO workflow](docs/sso-navigation.md) and

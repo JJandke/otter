@@ -29,8 +29,9 @@ client and policy; there is no independent OAuth integration or token replay.
    Those actions remain with the operator in an interactive `login` run.
 6. After a return to the portal, attempt the owner-reported unique visible
    `My Studium` and `Stundenplan` labels, each at most once. Their authenticated
-   DOM is not verified here. If those labels are absent, retain a single direct
-   timetable navigation after two seconds as fallback.
+   DOM is not verified here. If those labels are absent on the landing page, re-enter the visible
+   student card once after the SSO routing round trip. The full-document timetable
+   fallback has been removed; see [post-SSO routing](post-sso.md).
 7. Validate a direct API response before success. The original time budget,
    no-login-loop behavior, and nonzero failure exits remain in place.
 

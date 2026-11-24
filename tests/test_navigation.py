@@ -59,14 +59,14 @@ class NavigationTests(unittest.TestCase):
             self.advance(StudentNavigation(), page)
             page.get_by_role.return_value.filter.return_value.click.assert_not_called()
 
-    def test_schedule_navigation_after_student_return_is_bounded(self):
+    def test_student_page_never_uses_full_document_schedule_fallback(self):
         nav, page = StudentNavigation(), self.page(ORIGIN + "student/overview")
         self.advance(nav, page, 0)
         self.advance(nav, page, 1)
         page.goto.assert_not_called()
         self.advance(nav, page, 2)
         self.advance(nav, page, 3)
-        page.goto.assert_called_once_with(TARGET, wait_until="domcontentloaded", timeout=1000)
+        page.goto.assert_not_called()
 
     def test_no_navigation_when_schedule_already_open(self):
         nav, page = StudentNavigation(), self.page(TARGET)
@@ -132,15 +132,18 @@ class NavigationTests(unittest.TestCase):
             page.get_by_text.assert_not_called()
             page.goto.assert_not_called()
 
-    def test_return_to_portal_root_can_use_single_schedule_fallback(self):
+    def test_return_to_portal_root_reenters_student_card_once_without_reload(self):
         nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
                                 student_sso_clicked=True)
         page = self.page()
         self.advance(nav, page, 0)
         self.advance(nav, page, 2)
         self.advance(nav, page, 5)
-        page.goto.assert_called_once_with(TARGET, wait_until='domcontentloaded', timeout=1000)
-        page.get_by_role.assert_not_called()
+        page.goto.assert_not_called()
+        page.get_by_role.assert_called_once_with(
+            'heading', name='Für Studierende', level=2, exact=True)
+        page.get_by_role.return_value.filter.return_value.click.assert_called_once()
+        self.assertTrue(nav.post_sso_student_entry_clicked)
 
     def test_reported_menu_order_and_no_repeated_clicks(self):
         page = self.page(ORIGIN + 'student/overview')
@@ -158,3 +161,60 @@ class NavigationTests(unittest.TestCase):
         schedule.filter.return_value.click.assert_called_once()
         self.assertTrue(nav.my_studium_clicked)
         self.assertTrue(nav.timetable_link_clicked)
+
+    def test_post_sso_reentry_waits_for_callback_to_clear(self):
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        page = self.page(ORIGIN + '#code=SECRET')
+        self.advance(nav, page)
+        page.get_by_role.assert_not_called()
+        page.url = ORIGIN
+        self.advance(nav, page, 1)
+        self.assertTrue(nav.post_sso_student_entry_clicked)
+        page.goto.assert_not_called()
+
+    def test_visible_student_menu_is_used_before_post_sso_card(self):
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        page = self.page()
+        page.get_by_text.return_value.filter.return_value.count.return_value = 1
+        self.advance(nav, page)
+        self.assertTrue(nav.my_studium_clicked)
+        self.assertFalse(nav.post_sso_student_entry_clicked)
+        page.get_by_role.assert_not_called()
+        page.goto.assert_not_called()
+
+    def test_reentry_does_not_restart_signin_loop(self):
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        page = self.page()
+        self.advance(nav, page)
+        page.url = ORIGIN + 'login/student'
+        page.get_by_role.reset_mock()
+        for tick in range(10):
+            self.advance(nav, page, tick)
+        page.get_by_role.assert_not_called()
+        page.goto.assert_not_called()
+
+    def test_missing_selector_logged_once_per_action_without_guessing(self):
+        events = []
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True,
+                                trace=lambda event, **kw: events.append((event, kw)))
+        page = self.page(count=0)
+        for tick in range(10):
+            self.advance(nav, page, tick)
+        self.assertEqual(len(events), 3)
+        self.assertTrue(all(e[0] == 'selector_missing' and e[1]['matches'] == 0 for e in events))
+        self.assertFalse(nav.post_sso_student_entry_clicked)
+        self.assertFalse(nav.schedule_navigation_attempted)
+        page.goto.assert_not_called()
+
+    def test_reentry_is_ambiguous_when_multiple_visible_cards_remain(self):
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        page = self.page(count=2)
+        with self.assertRaises(BootstrapError) as raised:
+            self.advance(nav, page)
+        self.assertEqual(str(raised.exception), 'ambiguous_post_sso_student_entry')
+        page.get_by_role.return_value.filter.return_value.click.assert_not_called()

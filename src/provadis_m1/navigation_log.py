@@ -14,10 +14,11 @@ EVENTS = {
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
     'navigation_request', 'navigation_response', 'navigation_failed', 'page_location',
+    'selector_missing',
     'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
 }
 ACTIONS = {
-    'student_entry_clicked', 'sign_in_clicked', 'student_sso_clicked',
+    'student_entry_clicked', 'post_sso_student_entry_clicked', 'sign_in_clicked', 'student_sso_clicked',
     'my_studium_clicked', 'timetable_link_clicked', 'portal_start',
     'schedule_fallback', 'direct_api',
 }

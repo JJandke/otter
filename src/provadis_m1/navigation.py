@@ -14,12 +14,13 @@ B2C_ORIGIN = "https://ishgroupb2c.b2clogin.com"
 class StudentNavigation:
     trace: Any = field(default=None, repr=False)
     student_entry_clicked: bool = False
+    post_sso_student_entry_clicked: bool = False
+    missing_selectors_logged: set[str] = field(default_factory=set, repr=False)
     sign_in_clicked: bool = False
     student_sso_clicked: bool = False
     my_studium_clicked: bool = False
     timetable_link_clicked: bool = False
     schedule_navigation_attempted: bool = False
-    student_page_seen_at: float | None = None
 
     def _click_once(self, locator: Any, flag: str, timeout_ms: int, pw_error: type) -> bool:
         if getattr(self, flag):
@@ -31,6 +32,9 @@ class StudentNavigation:
                 self.trace("selector_ambiguous", action=flag, matches=count)
             raise BootstrapError("ambiguous_" + flag.removesuffix("_clicked"))
         if count == 0:
+            if self.trace and flag not in self.missing_selectors_logged:
+                self.trace("selector_missing", action=flag, matches=0)
+                self.missing_selectors_logged.add(flag)
             return False
         setattr(self, flag, True)
         if self.trace:
@@ -55,7 +59,6 @@ class StudentNavigation:
         current_origin = (current.scheme, current.netloc)
         b2c = urlsplit(B2C_ORIGIN)
         if current_origin == (b2c.scheme, b2c.netloc):
-            self.student_page_seen_at = None
             # This routing option was inspected on the public B2C page. OAuth
             # query parameters are expected here but are never read or reported.
             # Do not choose the generic Microsoft option in the applicant section.
@@ -67,13 +70,10 @@ class StudentNavigation:
                 )
             return
         if current_origin != (origin.scheme, origin.netloc):
-            self.student_page_seen_at = None
             return  # Microsoft email/password/passkey/MFA/stay-signed-in remain manual.
         if current.query or current.fragment:
-            self.student_page_seen_at = None
             return  # Leave portal OAuth callback handling to the original SPA.
         if current.path.rstrip("/") == "/login/student":
-            self.student_page_seen_at = None
             if not self.sign_in_clicked:
                 self._click_once(
                     page.get_by_role("button", name="Jetzt anmelden", exact=True),
@@ -82,7 +82,6 @@ class StudentNavigation:
             return
         is_landing = current.path in ("", "/")
         if is_landing and not self.student_entry_clicked and not self.student_sso_clicked:
-            self.student_page_seen_at = None
             self._click_once(
                 page.get_by_role("heading", name="Für Studierende", level=2, exact=True),
                 "student_entry_clicked", timeout_ms, pw_error,
@@ -90,7 +89,6 @@ class StudentNavigation:
             return
         is_student_page = current.path == "/student" or current.path.startswith("/student/")
         if not is_student_page and not (is_landing and self.student_sso_clicked):
-            self.student_page_seen_at = None
             return
         if current.path == target.path and current.fragment == target.fragment:
             return
@@ -109,31 +107,20 @@ class StudentNavigation:
                 timeout_ms, pw_error,
             ):
                 return
-        if self.schedule_navigation_attempted:
-            return
-        # Retain one direct timetable navigation as fallback after portal return.
-        # Delay is stabilization only, not a claim that authentication succeeded.
-        if self.student_page_seen_at is None:
-            self.student_page_seen_at = now
-            return
-        if now - self.student_page_seen_at < 2:
-            return
-        self.schedule_navigation_attempted = True
-        if self.trace:
-            self.trace("goto_attempt", action="schedule_fallback", url=target_url)
-        try:
-            page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
-        except pw_error:
-            if self.trace:
-                self.trace("goto_failed", action="schedule_fallback", url=page.url)
-            raise BootstrapError("post_signin_schedule_navigation_failed") from None
-
-        if self.trace:
-            self.trace("goto_completed", action="schedule_fallback", url=page.url)
+        if is_landing and self.student_sso_clicked and not self.post_sso_student_entry_clicked:
+            # SSO selection is not proof of API authorization. Re-enter the visible
+            # student card once, in the current SPA document; never reload it here.
+            self._click_once(
+                page.get_by_role("heading", name="Für Studierende", level=2, exact=True),
+                "post_sso_student_entry_clicked", timeout_ms, pw_error,
+            )
+        # No page.goto fallback: a full document reload returned to the landing
+        # page in the owner's trace. Wait for portal navigation or fail closed.
 
     def diagnostics(self) -> dict[str, bool]:
         return {
             "student_entry_clicked": self.student_entry_clicked,
+            "post_sso_student_entry_clicked": self.post_sso_student_entry_clicked,
             "sign_in_clicked": self.sign_in_clicked,
             "student_sso_clicked": self.student_sso_clicked,
             "my_studium_clicked": self.my_studium_clicked,
