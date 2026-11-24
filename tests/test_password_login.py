@@ -26,6 +26,7 @@ class PasswordLoginTests(unittest.TestCase):
         self.controls = {}
         self.page = Mock(url='https://login.microsoftonline.com/common/oauth2/authorize')
         self.page.locator.side_effect = self.locator
+        self.page.get_by_text.return_value.filter.return_value.count.return_value = 0
         self.login = PasswordLogin(LoginCredentials(USER, SECRET))
 
     def locator(self, selector):
@@ -59,7 +60,8 @@ class PasswordLoginTests(unittest.TestCase):
         self.advance()
         self.advance()
         self.assertEqual(self.locator(BUTTON).filter.return_value.click.call_count, 3)
-        self.assertTrue(all(self.login.diagnostics().values()))
+        self.assertTrue(self.login.password_submitted)
+        self.assertTrue(self.login.keep_signed_in_clicked)
 
     def test_other_origins_and_lookalikes_never_receive_credentials(self):
         for url in ('https://hvsweb.provadis-hochschule.de/',
@@ -138,3 +140,26 @@ class PasswordLoginTests(unittest.TestCase):
         email.fill.assert_not_called()
         email.dispose.assert_called_once()
         self.locator(BUTTON).filter.return_value.click.assert_not_called()
+
+    def test_password_choice_is_clicked_once_before_password_submission(self):
+        self.login.email_submitted = True
+        choice = self.page.get_by_text.return_value.filter.return_value
+        choice.count.return_value = 1
+        choice.element_handle.return_value = choice
+        choice.evaluate.return_value = True
+        self.advance()
+        self.advance()
+        choice.click.assert_called_once()
+        self.page.get_by_text.assert_called_with('Use my password', exact=True)
+        self.assertTrue(self.login.password_choice_clicked)
+        self.show(PASSWORD, BUTTON)
+        self.advance()
+        self.assertTrue(self.login.password_submitted)
+
+    def test_ambiguous_password_choice_is_never_clicked(self):
+        self.login.email_submitted = True
+        choice = self.page.get_by_text.return_value.filter.return_value
+        choice.count.return_value = 2
+        with self.assertRaisesRegex(BootstrapError, 'ambiguous_password_choice'):
+            self.advance()
+        choice.click.assert_not_called()

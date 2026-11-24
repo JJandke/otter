@@ -15,6 +15,7 @@ class PasswordLogin:
     email_submitted: bool = False
     password_submitted: bool = False
     keep_signed_in_clicked: bool = False
+    password_choice_clicked: bool = False
     _last_form: tuple | None = field(default=None, repr=False)
     _email_attempted: bool = field(default=False, repr=False)
     _password_attempted: bool = field(default=False, repr=False)
@@ -83,6 +84,18 @@ class PasswordLogin:
                     if self.trace:
                         self.trace('credential_step_completed', action='password_submit')
                 return
+            if (self.email_submitted and not self._password_attempted
+                    and not self.password_choice_clicked and email is None and password is None):
+                choice = page.get_by_text('Use my password', exact=True).filter(visible=True)
+                count = choice.count()
+                if count > 1:
+                    raise BootstrapError('ambiguous_password_choice')
+                if count == 1:
+                    self.password_choice_clicked = True
+                    self._act(choice, timeout_ms)
+                    if self.trace:
+                        self.trace('credential_step_completed', action='password_choice')
+                    return
             # "Stay signed in" is allowed only with its specific Microsoft marker
             # after our password attempt, never a generic Yes/consent button.
             if (self.password_submitted and not self._keep_attempted
@@ -100,6 +113,7 @@ class PasswordLogin:
 
     def diagnostics(self) -> dict[str, bool]:
         return {
+            'password_choice_clicked': self.password_choice_clicked,
             'credential_email_attempted': self._email_attempted,
             'credential_password_attempted': self._password_attempted,
             'credential_email_submitted': self.email_submitted,

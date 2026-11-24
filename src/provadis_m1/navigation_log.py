@@ -21,7 +21,7 @@ EVENTS = {
 ACTIONS = {
     'student_entry_clicked', 'post_sso_student_entry_clicked', 'sign_in_clicked', 'student_sso_clicked',
     'my_studium_clicked', 'timetable_link_clicked', 'portal_start',
-    'schedule_fallback', 'direct_api', 'email_submit', 'password_submit', 'keep_signed_in',
+    'schedule_fallback', 'direct_api', 'email_submit', 'password_submit', 'keep_signed_in', 'password_choice',
 }
 HOSTS = {
     'hvsweb.provadis-hochschule.de', 'api.provadis-hochschule.de',
