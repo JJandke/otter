@@ -16,6 +16,7 @@
 *.key
 *.passwd
 .env
+*.env
 .env.*
 !.env.example
 *.log

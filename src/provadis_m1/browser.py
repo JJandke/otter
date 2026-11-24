@@ -16,6 +16,8 @@ from .errors import (
 from .validation import MAX_RESPONSE_BYTES, ValidatedSnapshot, validate_http, validate_response
 from .navigation import DEFAULT_PORTAL_PATH, StudentNavigation
 from .navigation_log import attach_navigation_log
+from .credentials import LoginCredentials
+from .password_login import PasswordLogin
 
 PORTAL_URL = "https://hvsweb.provadis-hochschule.de/"
 API_URL = "https://api.provadis-hochschule.de/api/v1/Student/GetEventList"
@@ -152,6 +154,7 @@ def browser_run(
     portal_path: str = DEFAULT_PORTAL_PATH,
     headed: bool = False,
     trace: Any = None,
+    credentials: LoginCredentials | None = None,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
     try:
@@ -162,6 +165,7 @@ def browser_run(
 
     capture = PortalCapture()
     navigation = StudentNavigation(trace=trace)
+    password_login = PasswordLogin(credentials, trace=trace) if credentials else None
     visible = interactive or headed
     try:
         with sync_playwright() as playwright:
@@ -214,6 +218,11 @@ def browser_run(
                     if trace:
                         trace.observe_url(page.url)
                     remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+                    if password_login:
+                        password_login.advance(
+                            page, timeout_ms=min(request_seconds * 1000, remaining_ms),
+                            pw_error=PlaywrightError,
+                        )
                     navigation.advance(
                         page, portal_origin=PORTAL_URL, target_url=target_url,
                         now=time.monotonic(),
@@ -224,6 +233,8 @@ def browser_run(
                         page.wait_for_timeout(200)
                     except PlaywrightError:
                         raise AuthenticationError("browser_closed_before_authentication") from None
+                if (password_login and capture.bearer is None and capture.api_requests == 0):
+                    raise BootstrapError('headless_login_incomplete')
                 capture.require_bearer()
 
                 counts = []
@@ -244,6 +255,7 @@ def browser_run(
                     "diagnostics": {
                         **capture.diagnostics(page.url, headed=visible),
                         **navigation.diagnostics(),
+                        **(password_login.diagnostics() if password_login else {}),
                     },
                     "direct_api_samples": len(counts),
                     "event_counts": counts,
@@ -262,6 +274,8 @@ def browser_run(
                     page.url if page is not None else "about:blank", headed=visible
                 )
                 error.diagnostics.update(navigation.diagnostics())
+                if password_login:
+                    error.diagnostics.update(password_login.diagnostics())
                 raise
             finally:
                 capture.bearer = None

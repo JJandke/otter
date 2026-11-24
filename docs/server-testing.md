@@ -37,6 +37,16 @@ Ubuntu 22.04 is in Playwright's documented supported Linux family. Browser/kerne
 sandbox availability and actual `franz` packages still need testing. Do not solve
 a launch failure by running Chromium as root or adding `--no-sandbox`.
 
+## Optional headless initial login
+
+After a successful browser smoke check, the explicit credential-file feature can
+attempt Microsoft email/password login without a display. Follow
+[headless-login.md](headless-login.md). The file stays outside the checkout and
+requires owner-only access. Normal `fetch`/`verify` still use browser state only.
+If MFA/passkeys, account selection or an unsupported prompt prevents completion,
+a supported interactive method remains necessary; credentials alone cannot
+establish the missing additional factor. No headless success is assumed.
+
 ## Temporary graphical access via an SSH tunnel
 
 Use a temporary Xvfb display and password-protected VNC bound to server loopback.

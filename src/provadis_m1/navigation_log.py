@@ -14,13 +14,13 @@ EVENTS = {
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
     'navigation_request', 'navigation_response', 'navigation_failed', 'page_location',
-    'selector_missing', 'dashboard_retry',
+    'selector_missing', 'dashboard_retry', 'credential_step_completed',
     'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
 }
 ACTIONS = {
     'student_entry_clicked', 'post_sso_student_entry_clicked', 'sign_in_clicked', 'student_sso_clicked',
     'my_studium_clicked', 'timetable_link_clicked', 'portal_start',
-    'schedule_fallback', 'direct_api',
+    'schedule_fallback', 'direct_api', 'email_submit', 'password_submit', 'keep_signed_in',
 }
 HOSTS = {
     'hvsweb.provadis-hochschule.de', 'api.provadis-hochschule.de',

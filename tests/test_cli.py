@@ -83,3 +83,39 @@ class CLITests(unittest.TestCase):
         _, normal, normal_run = self.invoke(return_value={'event_counts': [2]})
         self.assertNotIn('navigation_log', normal)
         self.assertIsNone(normal_run.call_args.kwargs['trace'])
+
+    def test_credentials_are_only_accepted_for_explicit_headless_login(self):
+        for command, flags in (
+            ('fetch', ('--headless', '--credentials-file', '/never-read.env')),
+            ('verify', ('--headless', '--credentials-file', '/never-read.env')),
+            ('login', ('--credentials-file', '/never-read.env')),
+            ('login', ('--headless',)),
+            ('login', ('--headed', '--headless', '--credentials-file', '/never-read.env')),
+        ):
+            with patch('provadis_m1.__main__.load_credentials') as load:
+                code, result, run = self.invoke(command, extra=flags)
+            self.assertEqual(code, 6)
+            self.assertFalse(result['ok'])
+            load.assert_not_called()
+            run.assert_not_called()
+
+    def test_explicit_headless_login_does_not_open_a_headed_browser_or_echo_credentials(self):
+        from provadis_m1.credentials import LoginCredentials
+        credentials = LoginCredentials('synthetic.person@example.invalid', 'SYNTHETIC-SECRET')
+        with patch('provadis_m1.__main__.load_credentials', return_value=credentials):
+            code, result, run = self.invoke('login', return_value={'event_counts': [2]},
+                                           extra=('--headless', '--credentials-file', '/private.env'))
+        self.assertEqual(code, 0)
+        self.assertFalse(run.call_args.kwargs['interactive'])
+        self.assertFalse(run.call_args.kwargs['headed'])
+        self.assertIs(run.call_args.kwargs['credentials'], credentials)
+        self.assertNotIn('SYNTHETIC-SECRET', json.dumps(result))
+        self.assertNotIn(credentials.username, json.dumps(result))
+
+    def test_fetch_and_verify_never_load_credentials_implicitly(self):
+        for command in ('fetch', 'verify'):
+            with patch('provadis_m1.__main__.load_credentials') as load:
+                code, _, run = self.invoke(command, return_value={'event_counts': [2]})
+            self.assertEqual(code, 0)
+            load.assert_not_called()
+            self.assertIsNone(run.call_args.kwargs['credentials'])

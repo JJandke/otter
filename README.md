@@ -42,7 +42,9 @@ use its existing `.venv/bin/python` until that experiment is complete.
 In PyCharm, open this directory and select `.venv/bin/python` as the interpreter.
 Use this directory as the working directory. Either run `scripts/m1` in the
 terminal, or configure a Python module run for `provadis_m1` with `src` marked as
-Sources Root. No credentials belong in run configurations or environment files.
+Sources Root. Keep credentials out of run configurations and the repository.
+For explicit server-side credential-assisted login, see
+[headless login](docs/headless-login.md); it uses an owner-only file outside Git.
 
 ## Authenticate, then test reuse
 
@@ -75,8 +77,11 @@ the visible student card once if the landing page remains. If the timetable rout
 returns to the authenticated dashboard before API retrieval, it permits one more
 menu-navigation attempt within the same timeout; see
 [dashboard recovery](docs/dashboard-retry.md). It no longer performs
-a full-document timetable reload. See [post-SSO routing](docs/post-sso.md). It never fills
-credentials or handles passkey/MFA/confirmation prompts. It clicks the public
+a full-document timetable reload. See [post-SSO routing](docs/post-sso.md).
+Normal login is interactive; fetch/verify never fill credentials. An explicit
+`login --headless --credentials-file ...` can attempt the email/password forms
+and the specifically identified stay-signed-in prompt. It does not automate
+passkey/MFA, account selection, or application-permission consent prompts. It clicks the public
 `Jetzt anmelden` button and the dedicated student SSO routing option; see
 [the complete SSO workflow](docs/sso-navigation.md) and
 [student-entry testing](docs/student-entry.md).
@@ -90,7 +95,8 @@ You can still override the same-origin route explicitly:
 Do not use an OAuth callback URL, query string,
 authorization code, or token-bearing fragment. Only simple paths/hash routes are
 accepted. Automatic routing clicks are bounded and restricted to the documented
-portal/student SSO controls; credentials remain manual.
+portal/student SSO controls. Credential filling requires the separate explicit
+headless-login option; see its limitations before using it.
 
 For an opt-in redacted click/navigation logfile, add `--navigation-log`. The
 result names a unique JSONL file under `.m1-state`; see
@@ -131,6 +137,7 @@ university returned a semantically complete timetable.
 
 - [Development workflow, tests, rollback, and restart diagnosis](docs/development.md)
 - [Authentication and reauthentication](docs/authentication.md)
+- [Explicit credential-assisted headless login](docs/headless-login.md)
 - [Safe SSH-only server testing](docs/server-testing.md)
 - [Feasibility assessment and acceptance evidence](docs/feasibility.md)
 - [Environment and publishing](docs/environment.md)

@@ -5,6 +5,13 @@ For a successful login followed by failed fetch/verify, first follow
 uses category `bootstrap`, exit 8, with safe diagnostics. It does not establish
 that login expired. Keep the existing profile intact while investigating.
 
+## Credential-assisted headless login
+
+The owner requested an opt-in initial server-login attempt without a GUI. It is
+part of M1 and is separate from normal fetch/verify. See [headless-login.md](headless-login.md)
+for the protected external file, supported forms and failure handling. This is
+not an independent OAuth integration and does not bypass MFA/passkeys.
+
 ## What this prototype does
 
 1. Acquire a nonblocking process lock on a private, marked M1 state directory.
@@ -87,8 +94,11 @@ are observations, not proof of a particular grant type, renewal, SSO, or MFA.
 
 The server uses the tunneled GUI procedure in [server-testing.md](server-testing.md).
 Do not copy a macOS profile or tokens to Linux; portability is not established and
-may depend on OS key storage. No passwords or refresh tokens are accepted through
-chat, CLI flags, environment files, or source configuration.
+may depend on OS key storage. Never send credentials through chat or put their
+values in CLI flags or source configuration. Passwords may be read only for the
+explicit headless-login option from an owner-only external credential file. It
+is never sourced or exported into process environment variables. Refresh tokens
+are never accepted from external files or arguments.
 
 If a profile is unusable, leave it private for diagnosis or retire it with a
 deliberate local operator action, then authenticate in a fresh dedicated M1 state

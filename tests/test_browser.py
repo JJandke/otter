@@ -247,3 +247,82 @@ class BrowserBoundaryTests(unittest.TestCase):
         self.assertFalse(result['diagnostics']['browser_mode'] == 'headed')
         page.goto.assert_called_once()
         context.close.assert_called_once()
+
+    def test_credential_login_feeds_existing_validated_api_path(self):
+        from provadis_m1.credentials import LoginCredentials
+        page = Mock(url='https://login.microsoftonline.com/common/oauth2/authorize')
+        context = Mock(pages=[page])
+        callbacks = {}
+        context.on.side_effect = lambda event, callback: callbacks.update({event: callback})
+        email, password, button, absent = Mock(), Mock(), Mock(), Mock()
+        step = 0
+        email.count.side_effect = lambda: int(step == 0)
+        password.count.side_effect = lambda: int(step == 1)
+        button.count.return_value = 1
+        absent.count.return_value = 0
+        for locator in (email, password, button, absent):
+            locator.filter.return_value = locator
+            locator.element_handle.return_value = locator
+            locator.evaluate.return_value = True
+        page.locator.side_effect = lambda selector: {
+            'input[name="loginfmt"]': email,
+            'input[name="passwd"][type="password"]': password,
+            '#idSIButton9': button,
+        }.get(selector, absent)
+
+        def submit(**_kwargs):
+            nonlocal step
+            step += 1
+            if step == 2:
+                page.url = PORTAL_URL
+                request = self.request()
+                callbacks['request'](request)
+                callbacks['response'](Mock(url=API_URL, request=request, status=200))
+
+        button.click.side_effect = submit
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        manager = Mock()
+        manager.__enter__ = Mock(return_value=playwright)
+        manager.__exit__ = Mock(return_value=False)
+        module = types.ModuleType('playwright.sync_api')
+        module.Error = SyntheticPlaywrightError
+        module.sync_playwright = Mock(return_value=manager)
+        with patch.dict('sys.modules', {'playwright.sync_api': module}), \
+                patch('provadis_m1.browser.StudentNavigation',
+                      return_value=Mock(diagnostics=Mock(return_value={}))), \
+                patch('provadis_m1.browser.direct_fetch', return_value=Mock(event_count=2)) as fetch:
+            result = browser_run(Path('unused-synthetic-profile'), interactive=False,
+                                 bootstrap_seconds=1, request_seconds=1, samples=1,
+                                 sample_interval=0,
+                                 credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'))
+        self.assertEqual(step, 2)
+        self.assertTrue(result['diagnostics']['credential_password_submitted'])
+        self.assertEqual(result['event_counts'], [2])
+        self.assertNotIn('SYNTHETIC-SECRET', json.dumps(result))
+        fetch.assert_called_once()
+        context.close.assert_called_once()
+        self.assertTrue(playwright.chromium.launch_persistent_context.call_args.kwargs['headless'])
+
+    def test_incomplete_headless_login_is_not_success_or_proof_of_expired_auth(self):
+        from provadis_m1.credentials import LoginCredentials
+        page = Mock(url='https://login.microsoftonline.com/')
+        context = Mock(pages=[page])
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        manager = Mock()
+        manager.__enter__ = Mock(return_value=playwright)
+        manager.__exit__ = Mock(return_value=False)
+        module = types.ModuleType('playwright.sync_api')
+        module.Error = SyntheticPlaywrightError
+        module.sync_playwright = Mock(return_value=manager)
+        with patch.dict('sys.modules', {'playwright.sync_api': module}):
+            with self.assertRaises(BootstrapError) as raised:
+                browser_run(Path('unused-synthetic-profile'), interactive=False,
+                            bootstrap_seconds=0, request_seconds=1, samples=1,
+                            sample_interval=0,
+                            credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'))
+        self.assertEqual(raised.exception.reason, 'headless_login_incomplete')
+        self.assertFalse(raised.exception.diagnostics['credential_password_submitted'])
+        self.assertNotIn('SYNTHETIC-SECRET', json.dumps(raised.exception.diagnostics))
+        context.close.assert_called_once()

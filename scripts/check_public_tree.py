@@ -24,7 +24,7 @@ def main() -> int:
     for raw_name in filter(None, names):
         path = Path(raw_name.decode("utf-8"))
         if (BAD_PARTS.intersection(path.parts) or path.suffix in BAD_SUFFIXES
-                or path.name.startswith(".env") or path.is_symlink()):
+                or path.name.startswith(".env") or path.suffix == ".env" or path.is_symlink()):
             bad.append(str(path))
             continue
         content = subprocess.check_output(["git", "show", f":{path.as_posix()}"])

@@ -119,6 +119,28 @@ References, checked 23 November 2026:
 [Playwright authentication](https://playwright.dev/python/docs/auth),
 [supported systems](https://playwright.dev/python/docs/intro).
 
+The owner's first headless server fetch on 24 November reached Microsoft login
+with zero timetable requests and zero observed token-endpoint requests. This is
+evidence that headless Chromium launch and the initial portal/SSO route work on
+that server. It does not establish authenticated API access or session reuse.
+
+## Optional headless initial login (implemented, not live-validated)
+
+`login --headless --credentials-file <private-file>` can make one Microsoft
+email/password submission and choose stay-signed-in only when its specific form
+marker is present. It does not automate MFA/passkeys or consent. The owner asked
+for this M1 experiment after the server reached Microsoft login with no session.
+The recognized form IDs are implementation assumptions validated by synthetic
+tests; live university/server validation is still required. Timeout remains a
+failed bootstrap, never a validated update or proof of incorrect credentials.
+
+This adds a plaintext university-password file while in use. Keep it owner-only
+and outside all Git checkouts; remove it after initial authentication if ongoing
+retention is unnecessary. It is more sensitive than a narrow timetable credential.
+Normal fetch and verify never load it, even if it remains present. Preserve the
+original browser-only/session-reuse evidence and record this separate initial
+login method accurately. See [headless-login.md](headless-login.md).
+
 ## Outstanding foundation work
 
 Setup now reads the required version from `.python-version`, rejects a mismatched
