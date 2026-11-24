@@ -78,12 +78,12 @@ def validate_response(status: int, content_type: str, body: bytes) -> ValidatedS
         raise InvalidResponse("malformed_json") from None
     if not isinstance(payload, dict):
         raise InvalidResponse("expected_envelope_object")
-    if not {"ok", "message", "message2", "data", "count"}.issubset(payload):
+    if not {"ok", "data", "count"}.issubset(payload):
         raise InvalidResponse("missing_envelope_fields")
     if payload["ok"] is not True:
         raise InvalidResponse("api_reported_failure")
     if any(
-        payload[key] is not None and not isinstance(payload[key], str)
+        payload.get(key) is not None and not isinstance(payload[key], str)
         for key in ("message", "message2")
     ):
         raise InvalidResponse("invalid_message_type")

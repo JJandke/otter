@@ -145,3 +145,21 @@ class CLITests(unittest.TestCase):
                                   extra=('--headed', '--failure-pause-seconds', '60'))
         self.assertEqual(code, 0)
         self.assertEqual(run.call_args.kwargs['failure_pause_seconds'], 60)
+
+    def test_keep_open_requires_visible_browser(self):
+        code, result, run = self.invoke("fetch", extra=("--keep-open-on-error",))
+        self.assertEqual(code, 6)
+        self.assertEqual(result["reason"], "keep_open_requires_visible_browser")
+        run.assert_not_called()
+
+    def test_interactive_login_can_keep_failed_window_open(self):
+        code, _, run = self.invoke("login", return_value={"event_counts": [2]},
+                                   extra=("--keep-open-on-error",))
+        self.assertEqual(code, 0)
+        self.assertTrue(run.call_args.kwargs["keep_open_on_error"])
+
+    def test_uncaptured_custom_route_is_rejected(self):
+        code, result, run = self.invoke(extra=("--portal-path", "/student/unconfirmed"))
+        self.assertEqual(code, 6)
+        self.assertEqual(result["reason"], "only_captured_timetable_route_supported")
+        run.assert_not_called()

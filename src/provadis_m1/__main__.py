@@ -13,7 +13,7 @@ from .browser import browser_run, portal_url
 from .credentials import load_credentials
 from .errors import ConfigurationError, M1Error
 from .state import private_state
-from .navigation import DEFAULT_PORTAL_PATH
+from .browser import DEFAULT_PORTAL_PATH
 from .navigation_log import NavigationLog
 
 
@@ -49,6 +49,10 @@ def parser() -> argparse.ArgumentParser:
                      help="Decline Microsoft WebAuthn requests; credential-assisted login only")
     cli.add_argument("--failure-pause-seconds", type=_interval, default=0,
                      help="Keep a failed headed browser open for 0-60 seconds")
+    cli.add_argument("--keep-open-on-error", action="store_true",
+                     help="Keep failed visible browser open until window close or Ctrl+C")
+    cli.add_argument("--state-seconds", type=_positive, default=60,
+                     help="Maximum unchanged state duration in headless mode")
     cli.add_argument("--navigation-log", action="store_true",
                      help="Write a redacted JSONL click/navigation log in the private state directory")
     return cli
@@ -67,9 +71,14 @@ def main(argv: list[str] | None = None) -> int:
                     or args.credentials_file is None):
                 raise ConfigurationError('credentials_require_explicit_login_mode')
         credentials = load_credentials(args.credentials_file) if args.credentials_file else None
-        if args.failure_pause_seconds and (not args.headed or args.command == 'verify'):
+        visible = args.headed or (args.command == "login" and credentials is None)
+        if args.keep_open_on_error and (not visible or args.command == "verify"):
+            raise ConfigurationError("keep_open_requires_visible_browser")
+        if args.failure_pause_seconds and (not visible or args.command == 'verify'):
             raise ConfigurationError('failure_pause_requires_headed_login_or_fetch')
         portal_url(args.portal_path)
+        if args.portal_path != DEFAULT_PORTAL_PATH:
+            raise ConfigurationError("only_captured_timetable_route_supported")
         if args.headed and args.command == "verify":
             raise ConfigurationError("verify_requires_headless_browsers")
         with private_state(args.state_dir) as profile, ExitStack() as stack:
@@ -100,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
                     credentials=credentials,
                     decline_passkey=args.decline_passkey,
                     failure_pause_seconds=args.failure_pause_seconds,
+                    keep_open_on_error=args.keep_open_on_error,
+                    state_seconds=args.state_seconds,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()

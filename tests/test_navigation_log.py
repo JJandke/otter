@@ -6,8 +6,6 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from provadis_m1.navigation_log import NavigationLog, attach_navigation_log, safe_url
-from provadis_m1.navigation import StudentNavigation
-from provadis_m1.errors import BootstrapError
 
 PORTAL = 'https://hvsweb.provadis-hochschule.de'
 
@@ -96,25 +94,15 @@ class NavigationLogTests(unittest.TestCase):
         callbacks['response'](Mock(request=request, url=PORTAL + '/', status=302))
         self.assertEqual(trace.call_args.kwargs['status'], 302)
 
-    def test_click_attempt_and_completion_or_failure_are_distinct(self):
-        class BrowserError(Exception):
-            pass
-        for fail, expected in ((False, 'click_completed'), (True, 'click_failed')):
-            events = []
-            nav = StudentNavigation(trace=lambda event, **kw: events.append((event, kw)))
-            page = Mock(url=PORTAL + '/')
-            entry = page.get_by_role.return_value.filter.return_value
-            entry.count.return_value = 1
-            if fail:
-                entry.click.side_effect = BrowserError('SECRET')
-                with self.assertRaises(BootstrapError):
-                    nav.advance(page, portal_origin=PORTAL, target_url=PORTAL + '/student/schedule',
-                                now=0, timeout_ms=1000, pw_error=BrowserError)
-            else:
-                nav.advance(page, portal_origin=PORTAL, target_url=PORTAL + '/student/schedule',
-                            now=0, timeout_ms=1000, pw_error=BrowserError)
-            self.assertEqual([e[0] for e in events], ['click_attempt', expected])
-            self.assertNotIn('SECRET', json.dumps(events))
+    def test_auth_states_are_allowlisted_and_logged_without_page_content(self):
+        with tempfile.TemporaryDirectory() as temp, NavigationLog(Path(temp)) as log:
+            log("auth_state", state="password")
+            log("auth_action", state="password_choice")
+            with self.assertRaises(ValueError):
+                log("auth_state", state="SECRET")
+            self.assertNotIn("SECRET", log.path.read_text())
+            self.assertEqual(json.loads(log.path.read_text().splitlines()[-1])["state"],
+                             "password_choice")
 
     def test_log_has_a_fixed_event_limit(self):
         with tempfile.TemporaryDirectory() as temp, NavigationLog(Path(temp)) as log:

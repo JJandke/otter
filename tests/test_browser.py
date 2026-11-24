@@ -42,6 +42,7 @@ class BrowserBoundaryTests(unittest.TestCase):
 
     def test_bootstrap_failure_retains_diagnostics_and_closes_browser(self):
         page = Mock(url="https://ishgroupb2c.b2clogin.com/?code=SECRET")
+        page.is_closed.return_value = False
         context = Mock(pages=[page])
         playwright = Mock()
         playwright.chromium.launch_persistent_context.return_value = context
@@ -49,9 +50,11 @@ class BrowserBoundaryTests(unittest.TestCase):
         manager.__enter__ = Mock(return_value=playwright)
         manager.__exit__ = Mock(return_value=False)
         module = types.ModuleType("playwright.sync_api")
+        module.TimeoutError = SyntheticPlaywrightError
         module.Error = SyntheticPlaywrightError
         module.sync_playwright = Mock(return_value=manager)
-        with patch.dict("sys.modules", {"playwright.sync_api": module}):
+        with patch.dict("sys.modules", {"playwright.sync_api": module}), \
+                patch("provadis_m1.browser.capture_failure", return_value={"report": "safe.json"}):
             with self.assertRaises(BootstrapError) as raised:
                 browser_run(Path("unused-synthetic-profile"), interactive=False,
                             bootstrap_seconds=0, request_seconds=1, samples=1,
@@ -62,7 +65,7 @@ class BrowserBoundaryTests(unittest.TestCase):
         page.wait_for_timeout.assert_called_once_with(1000)
         context.close.assert_called_once()
         page.goto.assert_called_once_with(
-            PORTAL_URL, wait_until="domcontentloaded", timeout=1000
+            PORTAL_URL, wait_until="domcontentloaded", timeout=1
         )
         self.assertFalse(
             playwright.chromium.launch_persistent_context.call_args.kwargs["headless"]
@@ -191,142 +194,3 @@ class BrowserBoundaryTests(unittest.TestCase):
             direct_fetch(context, "Bearer SYNTHETIC", 1000, SyntheticPlaywrightError)
         response.body.assert_not_called()
         response.dispose.assert_called_once()
-
-    def test_brief_schedule_redirect_recovers_without_navigation_logging(self):
-        from provadis_m1.navigation import StudentNavigation
-
-        page = Mock(url=PORTAL_URL)
-        context = Mock(pages=[page])
-        page_events, context_events = {}, {}
-        page.on.side_effect = lambda event, callback: page_events.update({event: callback})
-        context.on.side_effect = lambda event, callback: context_events.update({event: callback})
-        page.get_by_role.return_value.filter.return_value.count.return_value = 0
-        menu, schedule = Mock(), Mock()
-        menu.filter.return_value.count.return_value = 1
-        schedule.filter.return_value.count.return_value = 1
-        page.get_by_text.side_effect = lambda label, **kw: {
-            'Mein Studium': menu, 'Stundenplan': schedule}[label]
-        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
-                                student_sso_clicked=True)
-        attempts = 0
-
-        def timetable_click(**_kwargs):
-            nonlocal attempts
-            attempts += 1
-            # Child-frame navigation must not count as opening the timetable.
-            page_events['framenavigated'](Mock(url=PORTAL_URL + 'student/schedule'))
-            self.assertFalse(nav._schedule_route_seen)
-            page.main_frame.url = page.url = PORTAL_URL + 'student/schedule'
-            page_events['framenavigated'](page.main_frame)
-            if attempts == 1:
-                # Full return to / happens before the next polling tick.
-                page.main_frame.url = page.url = PORTAL_URL
-                page_events['framenavigated'](page.main_frame)
-            else:
-                request = self.request()
-                context_events['request'](request)
-                context_events['response'](Mock(url=API_URL, request=request, status=200))
-
-        schedule.filter.return_value.click.side_effect = timetable_click
-        playwright = Mock()
-        playwright.chromium.launch_persistent_context.return_value = context
-        manager = Mock()
-        manager.__enter__ = Mock(return_value=playwright)
-        manager.__exit__ = Mock(return_value=False)
-        module = types.ModuleType('playwright.sync_api')
-        module.Error = SyntheticPlaywrightError
-        module.sync_playwright = Mock(return_value=manager)
-        with patch.dict('sys.modules', {'playwright.sync_api': module}), \
-                patch('provadis_m1.browser.StudentNavigation', return_value=nav), \
-                patch('provadis_m1.browser.direct_fetch', return_value=Mock(event_count=2)):
-            result = browser_run(Path('unused-synthetic-profile'), interactive=False,
-                                 bootstrap_seconds=1, request_seconds=1, samples=2,
-                                 sample_interval=0)
-        self.assertEqual(result['direct_api_samples'], 2)
-        self.assertEqual(result['diagnostics']['dashboard_retries'], 1)
-        self.assertEqual(attempts, 2)
-        self.assertFalse(result['diagnostics']['browser_mode'] == 'headed')
-        page.goto.assert_called_once()
-        context.close.assert_called_once()
-
-    def test_credential_login_feeds_existing_validated_api_path(self):
-        from provadis_m1.credentials import LoginCredentials
-        page = Mock(url='https://login.microsoftonline.com/common/oauth2/authorize')
-        context = Mock(pages=[page])
-        callbacks = {}
-        context.on.side_effect = lambda event, callback: callbacks.update({event: callback})
-        email, password, button, absent = Mock(), Mock(), Mock(), Mock()
-        step = 0
-        email.count.side_effect = lambda: int(step == 0)
-        password.count.side_effect = lambda: int(step == 1)
-        button.count.return_value = 1
-        absent.count.return_value = 0
-        for locator in (email, password, button, absent):
-            locator.filter.return_value = locator
-            locator.element_handle.return_value = locator
-            locator.evaluate.return_value = True
-        page.locator.side_effect = lambda selector: {
-            'input[name="loginfmt"]': email,
-            'input[name="passwd"][type="password"]': password,
-            '#idSIButton9': button,
-        }.get(selector, absent)
-
-        def submit(**_kwargs):
-            nonlocal step
-            step += 1
-            if step == 2:
-                page.url = PORTAL_URL
-                request = self.request()
-                callbacks['request'](request)
-                callbacks['response'](Mock(url=API_URL, request=request, status=200))
-
-        button.click.side_effect = submit
-        playwright = Mock()
-        playwright.chromium.launch_persistent_context.return_value = context
-        manager = Mock()
-        manager.__enter__ = Mock(return_value=playwright)
-        manager.__exit__ = Mock(return_value=False)
-        module = types.ModuleType('playwright.sync_api')
-        module.Error = SyntheticPlaywrightError
-        module.sync_playwright = Mock(return_value=manager)
-        with patch.dict('sys.modules', {'playwright.sync_api': module}), \
-                patch('provadis_m1.browser.StudentNavigation',
-                      return_value=Mock(diagnostics=Mock(return_value={}))), \
-                patch('provadis_m1.browser.direct_fetch', return_value=Mock(event_count=2)) as fetch:
-            result = browser_run(Path('unused-synthetic-profile'), interactive=False,
-                                 bootstrap_seconds=1, request_seconds=1, samples=1,
-                                 sample_interval=0,
-                                 credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'),
-                                 decline_passkey=True)
-        context.add_init_script.assert_called_once()
-        self.assertIn('NotAllowedError', context.add_init_script.call_args.args[0])
-        self.assertEqual(step, 2)
-        self.assertTrue(result['diagnostics']['credential_password_submitted'])
-        self.assertEqual(result['event_counts'], [2])
-        self.assertNotIn('SYNTHETIC-SECRET', json.dumps(result))
-        fetch.assert_called_once()
-        context.close.assert_called_once()
-        self.assertTrue(playwright.chromium.launch_persistent_context.call_args.kwargs['headless'])
-
-    def test_incomplete_headless_login_is_not_success_or_proof_of_expired_auth(self):
-        from provadis_m1.credentials import LoginCredentials
-        page = Mock(url='https://login.microsoftonline.com/')
-        context = Mock(pages=[page])
-        playwright = Mock()
-        playwright.chromium.launch_persistent_context.return_value = context
-        manager = Mock()
-        manager.__enter__ = Mock(return_value=playwright)
-        manager.__exit__ = Mock(return_value=False)
-        module = types.ModuleType('playwright.sync_api')
-        module.Error = SyntheticPlaywrightError
-        module.sync_playwright = Mock(return_value=manager)
-        with patch.dict('sys.modules', {'playwright.sync_api': module}):
-            with self.assertRaises(BootstrapError) as raised:
-                browser_run(Path('unused-synthetic-profile'), interactive=False,
-                            bootstrap_seconds=0, request_seconds=1, samples=1,
-                            sample_interval=0,
-                            credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'))
-        self.assertEqual(raised.exception.reason, 'headless_login_incomplete')
-        self.assertFalse(raised.exception.diagnostics['credential_password_submitted'])
-        self.assertNotIn('SYNTHETIC-SECRET', json.dumps(raised.exception.diagnostics))
-        context.close.assert_called_once()

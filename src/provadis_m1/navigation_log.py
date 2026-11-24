@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 EVENTS = {
+    'auth_state', 'auth_action', 'auth_action_completed', 'session_reauthentication',
     'log_started', 'log_finished', 'browser_started', 'browser_finished',
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
@@ -74,7 +75,12 @@ class NavigationLog:
             self.file.close()
 
     def __call__(self, event: str, *, action=None, url=None, outcome=None,
-                 status=None, matches=None):
+                 status=None, matches=None, state=None):
+        if state not in (None, "starting", "redirect", "student", "portal_login",
+                         "b2c_microsoft", "b2c_student", "email", "password",
+                         "password_choice", "kmsi", "study", "schedule", "timetable",
+                         "native_passkey", "unknown"):
+            raise ValueError("unrecognized authentication state")
         if event not in EVENTS or (action is not None and action not in ACTIONS):
             raise ValueError('unrecognized navigation log event/action')
         if outcome not in (None, 'failed', 'completed'):
@@ -92,7 +98,7 @@ class NavigationLog:
             'sequence': self.sequence, 'at': datetime.now(timezone.utc).isoformat(),
             'elapsed_ms': round((time.monotonic() - self.started) * 1000), 'event': event,
         }
-        for key, value in (('action', action), ('outcome', outcome), ('status', status), ('matches', matches)):
+        for key, value in (('action', action), ('outcome', outcome), ('status', status), ('matches', matches), ('state', state)):
             if value is not None:
                 row[key] = value
         if url is not None:
