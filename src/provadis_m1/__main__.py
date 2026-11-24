@@ -1,6 +1,7 @@
 """Run with PYTHONPATH=src python -m provadis_m1; stdout is sanitized JSON only."""
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -12,6 +13,7 @@ from .browser import browser_run, portal_url
 from .errors import ConfigurationError, M1Error
 from .state import private_state
 from .navigation import DEFAULT_PORTAL_PATH
+from .navigation_log import NavigationLog
 
 
 def _positive(value: str) -> int:
@@ -39,6 +41,8 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--portal-path", default=DEFAULT_PORTAL_PATH,
                      help="Same-origin timetable route (default: /student/schedule)")
     cli.add_argument("--headed", action="store_true", help="Visible fetch for diagnosis; not verify")
+    cli.add_argument("--navigation-log", action="store_true",
+                     help="Write a redacted JSONL click/navigation log in the private state directory")
     return cli
 
 
@@ -53,7 +57,10 @@ def main(argv: list[str] | None = None) -> int:
         portal_url(args.portal_path)
         if args.headed and args.command == "verify":
             raise ConfigurationError("verify_requires_headless_browsers")
-        with private_state(args.state_dir) as profile:
+        with private_state(args.state_dir) as profile, ExitStack() as stack:
+            trace = stack.enter_context(NavigationLog(profile.parent)) if args.navigation_log else None
+            if trace:
+                result["navigation_log"] = trace.path.name
             result["state_id"] = hashlib.sha256(str(profile.resolve()).encode()).hexdigest()[:12]
             interactive = args.command == "login"
             if interactive:
@@ -74,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
                     sample_interval=args.sample_interval,
                     portal_path=args.portal_path,
                     headed=args.headed,
+                    trace=trace,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()

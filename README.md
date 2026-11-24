@@ -78,6 +78,10 @@ authorization code, or token-bearing fragment. Only simple paths/hash routes are
 accepted. Automatic routing clicks are bounded and restricted to the documented
 portal/student SSO controls; credentials remain manual.
 
+For an opt-in redacted click/navigation logfile, add `--navigation-log`. The
+result names a unique JSONL file under `.m1-state`; see
+[recording and interpreting the navigation log](docs/navigation-log.md).
+
 ## Results and failures
 
 Stdout contains one JSON summary, including counts and UTC completion time.

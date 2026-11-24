@@ -73,3 +73,13 @@ class CLITests(unittest.TestCase):
         code, _, run = self.invoke(return_value={"event_counts": [2]}, extra=("--headed",))
         self.assertEqual(code, 0)
         self.assertTrue(run.call_args.kwargs["headed"])
+
+    def test_navigation_logging_is_opt_in_and_filename_is_reported_on_failure(self):
+        code, result, run = self.invoke(side_effect=BootstrapError(), extra=('--navigation-log',))
+        self.assertEqual(code, 8)
+        self.assertRegex(result['navigation_log'], r'^navigation-[0-9TZ]+-[a-f0-9]{8}\.jsonl$')
+        self.assertIsNotNone(run.call_args.kwargs['trace'])
+        self.assertTrue(run.call_args.kwargs['trace'].file.closed)
+        _, normal, normal_run = self.invoke(return_value={'event_counts': [2]})
+        self.assertNotIn('navigation_log', normal)
+        self.assertIsNone(normal_run.call_args.kwargs['trace'])

@@ -1,6 +1,6 @@
 """Bounded portal/SSO routing; never enter credentials or handle MFA prompts."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -12,6 +12,7 @@ B2C_ORIGIN = "https://ishgroupb2c.b2clogin.com"
 
 @dataclass
 class StudentNavigation:
+    trace: Any = field(default=None, repr=False)
     student_entry_clicked: bool = False
     sign_in_clicked: bool = False
     student_sso_clicked: bool = False
@@ -26,14 +27,22 @@ class StudentNavigation:
         visible = locator.filter(visible=True)
         count = visible.count()
         if count > 1:
+            if self.trace:
+                self.trace("selector_ambiguous", action=flag, matches=count)
             raise BootstrapError("ambiguous_" + flag.removesuffix("_clicked"))
         if count == 0:
             return False
         setattr(self, flag, True)
+        if self.trace:
+            self.trace("click_attempt", action=flag, matches=count)
         try:
             visible.click(timeout=timeout_ms)
         except pw_error:
+            if self.trace:
+                self.trace("click_failed", action=flag)
             raise BootstrapError(flag.removesuffix("_clicked") + "_click_failed") from None
+        if self.trace:
+            self.trace("click_completed", action=flag)
         return True
 
     def advance(
@@ -110,10 +119,17 @@ class StudentNavigation:
         if now - self.student_page_seen_at < 2:
             return
         self.schedule_navigation_attempted = True
+        if self.trace:
+            self.trace("goto_attempt", action="schedule_fallback", url=target_url)
         try:
             page.goto(target_url, wait_until="domcontentloaded", timeout=timeout_ms)
         except pw_error:
+            if self.trace:
+                self.trace("goto_failed", action="schedule_fallback", url=page.url)
             raise BootstrapError("post_signin_schedule_navigation_failed") from None
+
+        if self.trace:
+            self.trace("goto_completed", action="schedule_fallback", url=page.url)
 
     def diagnostics(self) -> dict[str, bool]:
         return {

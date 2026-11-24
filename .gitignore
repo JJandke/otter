@@ -25,6 +25,7 @@
 *.png
 *.jpg
 *.webm
+*.patch
 trace*.zip
 downloads/
 artifacts/

@@ -15,6 +15,7 @@ from .errors import (
 )
 from .validation import MAX_RESPONSE_BYTES, ValidatedSnapshot, validate_http, validate_response
 from .navigation import DEFAULT_PORTAL_PATH, StudentNavigation
+from .navigation_log import attach_navigation_log
 
 PORTAL_URL = "https://hvsweb.provadis-hochschule.de/"
 API_URL = "https://api.provadis-hochschule.de/api/v1/Student/GetEventList"
@@ -150,6 +151,7 @@ def browser_run(
     sample_interval: int,
     portal_path: str = DEFAULT_PORTAL_PATH,
     headed: bool = False,
+    trace: Any = None,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
     try:
@@ -159,7 +161,7 @@ def browser_run(
         raise ConfigurationError("playwright_not_installed") from None
 
     capture = PortalCapture()
-    navigation = StudentNavigation()
+    navigation = StudentNavigation(trace=trace)
     visible = interactive or headed
     try:
         with sync_playwright() as playwright:
@@ -181,16 +183,26 @@ def browser_run(
                 context.on("requestfailed", capture.observe_failed)
                 page = context.pages[0] if context.pages else context.new_page()
                 page.on("pageerror", capture.observe_page_error)
+                if trace:
+                    trace("browser_started")
+                    attach_navigation_log(page, trace)
+                    trace("goto_attempt", action="portal_start", url=PORTAL_URL)
                 try:
                     page.goto(
                         PORTAL_URL,
                         wait_until="domcontentloaded", timeout=request_seconds * 1000
                     )
                 except PlaywrightError:
+                    if trace:
+                        trace("goto_failed", action="portal_start", url=page.url)
                     raise NetworkError("portal_navigation_failed") from None
 
+                if trace:
+                    trace("goto_completed", action="portal_start", url=page.url)
                 deadline = time.monotonic() + bootstrap_seconds
                 while capture.bearer is None and time.monotonic() < deadline:
+                    if trace:
+                        trace.observe_url(page.url)
                     remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
                     navigation.advance(
                         page, portal_origin=PORTAL_URL, target_url=portal_url(portal_path),
@@ -210,10 +222,14 @@ def browser_run(
                     if sample:
                         # Pump browser events while waiting, allowing the portal to renew naturally.
                         page.wait_for_timeout(sample_interval * 1000)
+                    if trace:
+                        trace("api_attempt", action="direct_api", url=API_URL)
                     snapshot = direct_fetch(
                         context, capture.require_bearer(), request_seconds * 1000, PlaywrightError
                     )
                     counts.append(snapshot.event_count)
+                    if trace:
+                        trace("api_validated", action="direct_api", status=200)
                 return {
                     "diagnostics": {
                         **capture.diagnostics(page.url, headed=visible),
@@ -230,6 +246,8 @@ def browser_run(
                     ),
                 }
             except M1Error as error:
+                if trace:
+                    trace("run_failed", url=page.url if page else "about:blank")
                 error.diagnostics = capture.diagnostics(
                     page.url if page is not None else "about:blank", headed=visible
                 )
@@ -238,6 +256,8 @@ def browser_run(
             finally:
                 capture.bearer = None
                 context.close()
+                if trace:
+                    trace("browser_finished")
     except PlaywrightError:
         # Raw Playwright errors may contain request headers, URLs, or browser logs.
         raise ConfigurationError("browser_operation_failed") from None
