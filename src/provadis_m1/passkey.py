@@ -2,7 +2,9 @@
 
 DECLINE_PASSKEY_SCRIPT = r"""
 (() => {
-  if (location.origin !== 'https://login.microsoftonline.com' || !navigator.credentials) return;
+  const allowed = location.origin === 'https://login.microsoftonline.com' ||
+    (location.origin === 'https://login.microsoft.com' && location.pathname === '/common/bridge/fido');
+  if (!allowed || !navigator.credentials) return;
   const original = navigator.credentials.get.bind(navigator.credentials);
   navigator.credentials.get = function(options) {
     if (options && options.publicKey) {

@@ -54,7 +54,7 @@ class PortalCapture:
             location = "portal"
         elif parsed.hostname == IDENTITY_HOST:
             location = "identity_provider"
-        elif parsed.hostname in {"login.microsoftonline.com", "login.live.com"}:
+        elif parsed.hostname in {"login.microsoftonline.com", "login.microsoft.com", "login.live.com"}:
             location = "microsoft_login"
         elif final_url == "about:blank":
             location = "blank"

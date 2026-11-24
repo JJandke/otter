@@ -65,6 +65,7 @@ class PasswordLoginTests(unittest.TestCase):
         for url in ('https://hvsweb.provadis-hochschule.de/',
                     'https://ishgroupb2c.b2clogin.com/',
                     'https://login.live.com/',
+                    'https://login.microsoft.com/common/bridge/fido',
                     'https://login.microsoftonline.com.evil.invalid/',
                     'https://login.microsoftonline.com:8443/',
                     'https://user@login.microsoftonline.com/',
@@ -94,6 +95,9 @@ class PasswordLoginTests(unittest.TestCase):
         self.advance()
         self.locator(EMAIL).filter.return_value.fill.assert_called_once()
         self.locator(PASSWORD).filter.return_value.fill.assert_not_called()
+        self.advance()
+        self.locator(PASSWORD).filter.return_value.fill.assert_not_called()
+        self.show(PASSWORD, BUTTON)
         self.advance()
         self.advance()
         self.locator(PASSWORD).filter.return_value.fill.assert_called_once()

@@ -25,10 +25,10 @@ ACTIONS = {
 }
 HOSTS = {
     'hvsweb.provadis-hochschule.de', 'api.provadis-hochschule.de',
-    'ishgroupb2c.b2clogin.com', 'login.microsoftonline.com', 'login.live.com',
+    'ishgroupb2c.b2clogin.com', 'login.microsoft.com', 'login.microsoftonline.com', 'login.live.com',
 }
 PATHS = {
-    '/', '/login/student', '/student', '/student/', '/student/schedule',
+    '/common/bridge/fido', '/', '/login/student', '/student', '/student/', '/student/schedule',
     '/student/overview', '/api/v1/Student/GetEventList', '/common/oauth2/authorize',
     '/common/oauth2/v2.0/authorize', '/common/login', '/login.srf',
     '/ishgroupb2c.onmicrosoft.com/b2c_1a_hvs_signup_signin/oauth2/v2.0/authorize',
