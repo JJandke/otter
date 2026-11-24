@@ -5,6 +5,14 @@ Workflows in this guide keep each change small enough to understand and reverse.
 
 ## Current evidence
 
+On 24 November 2026 the owner demonstrated headless fetch and two successful
+headless verification lifetimes with two direct API samples each. Dashboard
+recovery was exercised in both lifetimes. The current working venv is Python
+3.14.7; clean Python 3.12 validation, long-duration renewal, and Ubuntu acceptance
+remain open. See [feasibility.md](feasibility.md) and [m1-cleanup.md](m1-cleanup.md).
+
+### Earlier diagnostic history
+
 The owner reported these runs on 23 November 2026:
 
 | Run | Result | Interpretation |
@@ -17,7 +25,7 @@ The owner reported these runs on 23 November 2026:
 These are owner-reported live results, not live runs performed by the assistant.
 Two token-endpoint requests do not by themselves prove refresh-token renewal.
 
-## What changed automatically in this increment
+## Original diagnostic increment (historical)
 
 - Prepared a patch against the owner's tracked `main` at `01b4b80`. The
   diagnostic source commit was developed in a separate writable checkout. The
@@ -114,11 +122,13 @@ them against production scheduling or change Nginx to provide GUI access.
 
 ## Git workflow, review, and rollback
 
-A branch is a movable name for a sequence of commits. Before applying the patch,
-create `fix/m1-session-diagnostics` from your current `main`. This keeps the
-existing baseline on `main` while we investigate M1. A commit
-records a reviewed source snapshot locally; a push publishes commits to GitHub.
-Neither action deploys the application. No pull-request workflow is needed yet.
+A branch is a movable name for a sequence of commits. Continue the existing
+`fix/m1-session-diagnostics` branch for the M1 cleanup. There is no need to switch
+to `main` or create a branch per patch. A commit records a reviewed source snapshot
+locally; a push publishes commits to GitHub. Neither deploys the application.
+Merge back to `main` after the work and acceptance evidence have been reviewed;
+use a pull request if helpful. For this cleanup's two commits and exact staged
+paths, follow [m1-cleanup.md](m1-cleanup.md).
 
 Before committing, run the tests above, then review only the intended changes:
 
@@ -126,7 +136,7 @@ Before committing, run the tests above, then review only the intended changes:
 git status --short --branch
 git diff
 # Stage specific source/documentation paths after reviewing them, not private state.
-git add AGENTS.md README.md docs src tests
+git add path/to/reviewed-file
 .venv/bin/python scripts/check_public_tree.py
 git diff --cached --check
 git diff --cached

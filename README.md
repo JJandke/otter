@@ -6,17 +6,25 @@ An isolated Python prototype for **authentication feasibility**, with no calenda
 database, public endpoint, or production job. It leaves the old application and
 existing Nginx/systemd configuration alone.
 
-**Status:** the owner reported a validated live login response with 82 events on
-23 November 2026. Subsequent fetch/restart attempts failed to obtain a timetable
-Bearer request, including a run using `/#/student/schedule`. Session restart
-reuse, unattended access, and server behavior remain unproven.
-Do not treat M1 as accepted until the live checks in
-[docs/feasibility.md](docs/feasibility.md) have recorded successful results.
+**Status (24 November 2026):** the owner demonstrated a successful headless
+fetch and one verification command with two separately launched headless browsers,
+each validating two direct samples of 80 events. Both browsers exercised the
+bounded dashboard retry. Long-duration renewal, idle recovery and target-server behavior remain open.
+The owner's current working venv is Python **3.14.7**; these live results do not
+establish compatibility with the declared Python **3.12.14** target. See
+[the acceptance evidence](docs/feasibility.md) and [environment notes](docs/environment.md).
+M1 is not yet fully accepted.
 
 ## Local setup (macOS / PyCharm)
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git.
-Then, from this project directory:
+For a fresh checkout, from this project directory:
+
+**Existing longevity-test checkout:** do not rerun setup or replace its venv/browser
+while measuring session persistence. The corrected setup deliberately refuses a
+venv that differs from `.python-version`. Apply source patches and run offline
+tests in the existing environment; validate Python 3.12 separately as described in
+[the cleanup workflow](docs/m1-cleanup.md).
 
 ```sh
 ./scripts/setup
@@ -60,8 +68,12 @@ unattended retrieval on that host. It does not establish long-term validity.
 
 The default route is now the owner-confirmed `/student/schedule`. If it redirects
 to the landing page, OTTER clicks the exact visible `Für Studierende` entry once
-to start the portal's normal SSO flow. After the SSO round trip it uses the reported student menus, or re-enters
-the visible student card once if the landing page remains. It no longer performs
+to start the portal's normal SSO flow. After the SSO round trip it uses
+`Mein Studium` and `Stundenplan`, or re-enters
+the visible student card once if the landing page remains. If the timetable route
+returns to the authenticated dashboard before API retrieval, it permits one more
+menu-navigation attempt within the same timeout; see
+[dashboard recovery](docs/dashboard-retry.md). It no longer performs
 a full-document timetable reload. See [post-SSO routing](docs/post-sso.md). It never fills
 credentials or handles passkey/MFA/confirmation prompts. It clicks the public
 `Jetzt anmelden` button and the dedicated student SSO routing option; see

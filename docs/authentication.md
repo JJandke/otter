@@ -39,7 +39,9 @@ this browser and use `--portal-path` in subsequent commands. OAuth callback URLs
 and URLs containing parameters are unsuitable. The default is `/student/schedule`.
 The owner confirmed that this route redirects to the landing page before the
 student flow is started. OTTER now tries the bounded navigation described in
-[student-entry testing](student-entry.md); its live success is still unproven.
+[student-entry testing](student-entry.md); the owner demonstrated headless fetch and restart reuse on 24 November 2026.
+See [the evidence and remaining gates](feasibility.md); longevity and server
+compatibility remain open.
 
 Then run `./scripts/m1 verify`. Both headless browser lifetimes must make valid,
 nonempty direct requests. Preserve the sanitized result locally if desired:
