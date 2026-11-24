@@ -15,7 +15,9 @@ a validated 82-event response. That is the observed basis for this patch.
   entries cause no guessed click. Public DOM inspection confirmed a hidden sidebar duplicate and a visible
   `<h2>` card heading. The selector now uses heading role, level 2, exact name,
   and visible filtering. Full live SSO still needs verification.
-- Leave identity-provider pages and URLs with query/fragment callbacks alone.
+- Leave portal query/fragment callbacks alone. A later incremental patch adds
+  the dedicated B2C student-provider choice; all credential/MFA prompts remain
+  manual. See [SSO navigation](sso-navigation.md).
 - If the portal is on a different `/student` page without a callback URL, wait
   two seconds, then attempt the target schedule URL once. This is a stabilization
   delay, not proof of completed authentication. Expiry/MFA can still require login.
@@ -44,7 +46,8 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 git diff --check
 ```
 
-Expect 45 tests and `OK`. The new tests check one bounded student-entry click,
+The student-entry increment originally had 45 tests. With the SSO-navigation
+increment, expect 52 tests and `OK`. The new tests check one bounded student-entry click,
 no clicks on identity/callback URLs, rejection of ambiguous matches, one schedule
 navigation after the delay, safe click errors, and the default route. They use
 mocks and do not prove live SSO or DOM compatibility. For PyCharm's test runner,

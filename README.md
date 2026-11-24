@@ -62,7 +62,9 @@ The default route is now the owner-confirmed `/student/schedule`. If it redirect
 to the landing page, OTTER clicks the exact visible `Für Studierende` entry once
 to start the portal's normal SSO flow. After a return to another student page,
 it waits two seconds and navigates to the schedule at most once. It never fills
-credentials or interacts with identity-provider forms. See
+credentials or handles passkey/MFA/confirmation prompts. It clicks the public
+`Jetzt anmelden` button and the dedicated student SSO routing option; see
+[the complete SSO workflow](docs/sso-navigation.md) and
 [student-entry testing](docs/student-entry.md).
 
 You can still override the same-origin route explicitly:
@@ -73,7 +75,8 @@ You can still override the same-origin route explicitly:
 
 Do not use an OAuth callback URL, query string,
 authorization code, or token-bearing fragment. Only simple paths/hash routes are
-accepted. The only automatic click is the observed student-entry label.
+accepted. Automatic routing clicks are bounded and restricted to the documented
+portal/student SSO controls; credentials remain manual.
 
 ## Results and failures
 

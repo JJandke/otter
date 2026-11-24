@@ -32,6 +32,7 @@ class BrowserBoundaryTests(unittest.TestCase):
             (PORTAL_URL + "?code=SECRET#token=SECRET", "portal"),
             ("https://ishgroupb2c.b2clogin.com/path?code=SECRET", "identity_provider"),
             ("https://example.invalid/SECRET", "other"),
+            ("https://login.microsoftonline.com/path?code=SECRET", "microsoft_login"),
             ("about:blank", "blank"),
         ):
             result = capture.diagnostics(url, headed=False)
