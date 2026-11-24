@@ -47,6 +47,8 @@ def parser() -> argparse.ArgumentParser:
                      help="Private credential file outside the repository; login with --headed or --headless only")
     cli.add_argument("--decline-passkey", action="store_true",
                      help="Decline Microsoft WebAuthn requests; credential-assisted login only")
+    cli.add_argument("--failure-pause-seconds", type=_interval, default=0,
+                     help="Keep a failed headed browser open for 0-60 seconds")
     cli.add_argument("--navigation-log", action="store_true",
                      help="Write a redacted JSONL click/navigation log in the private state directory")
     return cli
@@ -65,6 +67,8 @@ def main(argv: list[str] | None = None) -> int:
                     or args.credentials_file is None):
                 raise ConfigurationError('credentials_require_explicit_login_mode')
         credentials = load_credentials(args.credentials_file) if args.credentials_file else None
+        if args.failure_pause_seconds and (not args.headed or args.command == 'verify'):
+            raise ConfigurationError('failure_pause_requires_headed_login_or_fetch')
         portal_url(args.portal_path)
         if args.headed and args.command == "verify":
             raise ConfigurationError("verify_requires_headless_browsers")
@@ -95,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
                     trace=trace,
                     credentials=credentials,
                     decline_passkey=args.decline_passkey,
+                    failure_pause_seconds=args.failure_pause_seconds,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()

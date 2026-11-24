@@ -134,3 +134,14 @@ class CLITests(unittest.TestCase):
         code, _, run = self.invoke('fetch', extra=('--decline-passkey',))
         self.assertEqual(code, 6)
         run.assert_not_called()
+
+    def test_failure_pause_requires_visible_mode(self):
+        code, _, run = self.invoke(extra=('--failure-pause-seconds', '60'))
+        self.assertEqual(code, 6)
+        run.assert_not_called()
+
+    def test_failure_pause_is_forwarded_for_headed_diagnosis(self):
+        code, _, run = self.invoke(return_value={'event_counts': [2]},
+                                  extra=('--headed', '--failure-pause-seconds', '60'))
+        self.assertEqual(code, 0)
+        self.assertEqual(run.call_args.kwargs['failure_pause_seconds'], 60)

@@ -156,6 +156,7 @@ def browser_run(
     trace: Any = None,
     credentials: LoginCredentials | None = None,
     decline_passkey: bool = False,
+    failure_pause_seconds: int = 0,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
     try:
@@ -282,6 +283,13 @@ def browser_run(
                 error.diagnostics.update(navigation.diagnostics())
                 if password_login:
                     error.diagnostics.update(password_login.diagnostics())
+                if visible and failure_pause_seconds and page is not None:
+                    if trace:
+                        trace('failure_pause')
+                    try:
+                        page.wait_for_timeout(min(failure_pause_seconds, 60) * 1000)
+                    except PlaywrightError:
+                        pass  # Closing the diagnostic window must not replace the original failure.
                 raise
             finally:
                 capture.bearer = None

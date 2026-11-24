@@ -55,10 +55,11 @@ class BrowserBoundaryTests(unittest.TestCase):
             with self.assertRaises(BootstrapError) as raised:
                 browser_run(Path("unused-synthetic-profile"), interactive=False,
                             bootstrap_seconds=0, request_seconds=1, samples=1,
-                            sample_interval=0, headed=True)
+                            sample_interval=0, headed=True, failure_pause_seconds=1)
         self.assertEqual(raised.exception.diagnostics["final_location"], "identity_provider")
         self.assertEqual(raised.exception.diagnostics["browser_mode"], "headed")
         self.assertNotIn("SECRET", json.dumps(raised.exception.diagnostics))
+        page.wait_for_timeout.assert_called_once_with(1000)
         context.close.assert_called_once()
         page.goto.assert_called_once_with(
             PORTAL_URL, wait_until="domcontentloaded", timeout=1000

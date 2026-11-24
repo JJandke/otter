@@ -15,7 +15,7 @@ EVENTS = {
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
     'navigation_request', 'navigation_response', 'navigation_failed', 'page_location',
     'selector_missing', 'dashboard_retry', 'credential_step_completed',
-    'microsoft_form', 'passkey_decline_enabled',
+    'microsoft_form', 'passkey_decline_enabled', 'failure_pause',
     'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
 }
 ACTIONS = {

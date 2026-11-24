@@ -16,6 +16,7 @@ class PasswordLogin:
     password_submitted: bool = False
     keep_signed_in_clicked: bool = False
     password_choice_clicked: bool = False
+    last_operation: str = 'none'
     _last_form: tuple | None = field(default=None, repr=False)
     _email_attempted: bool = field(default=False, repr=False)
     _password_attempted: bool = field(default=False, repr=False)
@@ -33,18 +34,22 @@ class PasswordLogin:
     def _act(self, locator: Any, timeout_ms: int, value: str | None = None) -> None:
         # Bind to one DOM element, then verify its document before sending data.
         # A locator alone could re-resolve on a different origin after navigation.
+        self.last_operation = 'resolve_control'
         element = locator.element_handle(timeout=timeout_ms)
         if element is None:
             raise BootstrapError('microsoft_login_control_disappeared')
         try:
+            self.last_operation = 'verify_origin'
             trusted = element.evaluate(
                 "node => node.ownerDocument.location.origin === 'https://login.microsoftonline.com'"
             )
             if trusted is not True:
                 raise BootstrapError('microsoft_login_origin_changed')
             if value is None:
+                self.last_operation = 'click_control'
                 element.click(timeout=timeout_ms)
             else:
+                self.last_operation = 'fill_control'
                 element.fill(value, timeout=timeout_ms)
         finally:
             element.dispose()
@@ -63,7 +68,8 @@ class PasswordLogin:
             self._last_form = state
             # Microsoft may keep both controls visible during initialization.
             # Submit the email stage first; duplicate controls still fail closed.
-            if email is not None and not self._email_attempted and not self._password_attempted:
+            if (email is not None and not self.email_submitted
+                    and not self._email_attempted and not self._password_attempted):
                 button = self._unique(page, '#idSIButton9')
                 if button is not None:
                     self._email_attempted = True  # Never repeat a partially completed action.
@@ -111,8 +117,9 @@ class PasswordLogin:
         except pw_error:
             raise BootstrapError('microsoft_login_control_failed') from None
 
-    def diagnostics(self) -> dict[str, bool]:
+    def diagnostics(self) -> dict[str, bool | str]:
         return {
+            'credential_last_operation': self.last_operation,
             'password_choice_clicked': self.password_choice_clicked,
             'credential_email_attempted': self._email_attempted,
             'credential_password_attempted': self._password_attempted,
