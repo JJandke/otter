@@ -7,13 +7,14 @@ if ! command -v uv >/dev/null 2>&1; then
   echo 'Install uv using https://docs.astral.sh/uv/getting-started/installation/ then rerun.' >&2
   exit 6
 fi
+python_version=$(cat .python-version)
 if test -e .venv; then
-  if ! test -x .venv/bin/python || ! .venv/bin/python -c 'import sys; sys.exit(sys.version_info[:3] != (3, 14, 7))'; then
-    echo 'The existing .venv is not Python 3.12.14; review it locally before replacing it.' >&2
+  if ! test -x .venv/bin/python || ! .venv/bin/python -c 'import sys; sys.exit(".".join(map(str, sys.version_info[:3])) != sys.argv[1])' "$python_version"; then
+    echo "The existing .venv is not Python $python_version; review it locally before replacing it." >&2
     exit 6
   fi
 else
-  uv venv --python 3.12.14
+  uv venv --python "$python_version"
 fi
 uv pip sync --python .venv/bin/python requirements.lock
 .venv/bin/python -m playwright install chromium
