@@ -31,12 +31,13 @@ tests in the existing environment; validate Python 3.12 separately as described 
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-The setup pins Python 3.12.14 and all four runtime packages in
-`requirements.lock`. This is a pip-compatible lockfile used by `uv pip sync`;
-there is no generated native `uv.lock` yet. The lockfile pins versions but does
-not contain distribution hashes. See [the environment notes](docs/environment.md)
-for the remaining reproducibility checks. Use `./scripts/m1`, not `uv run`,
-which would create a different native project lock.
+Setup uses the Python version in `.python-version` (currently 3.12.14) and
+`uv sync --locked`. The generated `uv.lock` is the single authoritative dependency
+lock, including distribution hashes; the old `requirements.lock` has been removed.
+The four runtime versions are unchanged. `--locked` makes a stale lock an error
+instead of silently updating it. See [the migration workflow](docs/uv-lock.md).
+Do not run `uv sync` or `uv run` in the current Python 3.14 longevity-test checkout;
+use its existing `.venv/bin/python` until that experiment is complete.
 
 In PyCharm, open this directory and select `.venv/bin/python` as the interpreter.
 Use this directory as the working directory. Either run `scripts/m1` in the
@@ -133,6 +134,7 @@ university returned a semantically complete timetable.
 - [Safe SSH-only server testing](docs/server-testing.md)
 - [Feasibility assessment and acceptance evidence](docs/feasibility.md)
 - [Environment and publishing](docs/environment.md)
+- [Native uv lock, clean-install verification, and CI](docs/uv-lock.md)
 
 Before publishing, run `python3 scripts/check_public_tree.py` after staging the
 intended files and review `git diff --cached`. Keep all browser profiles, raw

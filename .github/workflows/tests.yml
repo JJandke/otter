@@ -1,22 +1,35 @@
-name: M1 offline checks
+name: M1 locked environment and checks
 on: [push, pull_request]
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.12.14'
-      - name: Unit tests (no credentials, no browser, no network)
+          python-version-file: '.python-version'
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: '0.13.9'
+          enable-cache: false
+      - name: Install the locked Python environment
+        run: uv sync --locked --no-build
+      - name: Unit tests (synthetic data, no portal access)
         env:
           PYTHONPATH: src
-        run: python -m unittest discover -s tests -v
-      - name: Compile Python
-        run: python -m compileall -q src scripts tests
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Compile Python and check shell syntax
+        run: |
+          .venv/bin/python -m compileall -q src scripts tests
+          sh -n scripts/setup scripts/m1 .githooks/pre-commit
+      - name: Install Chromium and Linux browser dependencies
+        run: .venv/bin/python -m playwright install --with-deps chromium
+      - name: Smoke-test sandboxed Chromium without authentication
+        run: .venv/bin/python scripts/check_browser.py
       - name: Check repository for private artifacts
-        run: python scripts/check_public_tree.py
+        run: .venv/bin/python scripts/check_public_tree.py

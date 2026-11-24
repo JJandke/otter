@@ -35,23 +35,30 @@ the original 72-hour evidence.
 
 ## Reproducibility boundary
 
-`requirements.lock` currently pins Playwright 1.62.0, greenlet 3.5.5, pyee 13.0.1,
-and typing-extensions 4.16.0. Installation uses `uv pip sync`; the file has exact
-versions but no distribution hashes. There is no native `uv.lock` yet.
+The native `uv.lock` was generated with uv 0.13.9 using the public PyPI registry.
+It pins Playwright 1.62.0, greenlet 3.5.5, pyee 13.0.1, and typing-extensions
+4.16.0, retaining the prior runtime versions and adding distribution hashes.
+The old `requirements.lock` has been removed. `uv sync --locked` is the installation
+mechanism; the lock must match `pyproject.toml`. The virtual project is still run
+with the existing `PYTHONPATH=src` wrapper, without adding packaging or a CLI API.
+
+A fresh Python 3.12.14 environment was successfully synchronized in an isolated
+macOS source copy; the 78 offline tests passed there. This is clean dependency
+installation evidence, not university authentication evidence. The existing
+Python 3.14 environment remains untouched. Chromium downloaded separately, but
+its smoke launch exited before page validation in the assistant session. A local
+browser smoke pass remains unproven; reproduce it with `scripts/check_browser.py`.
 
 Remaining work:
 
-1. In a fresh checkout, create the declared Python environment with
-   `./scripts/setup` and verify `./.venv/bin/python --version` reports 3.12.14.
-   Check dependency installation and offline tests on macOS and Ubuntu 22.04.
-2. Migrate to a genuine uv-generated lock in a separate reviewed increment.
-   Keep the current dependency versions initially, review distribution hashes
-   and update setup/CI/documentation together. Retain one authoritative lock.
-3. Verify actual GitHub Actions runs. A workflow file existing in Git is not
-   evidence of a passing job. A clean install also needs dependency/browser
-   installation checks; the existing CI runs offline tests without dependencies.
-4. Repeat live browser login/restart tests in the target-version environment and
-   on the target Ubuntu host. Do not infer browser compatibility from unit tests.
+1. Have the owner reproduce the fresh Python 3.12 installation and smoke checks
+   in a separate checkout. Keep its profile separate from the longevity series.
+2. Verify the updated GitHub Actions run on Ubuntu 22.04. It now installs the
+   locked dependencies and Chromium, runs the offline suite and a sandboxed browser
+   smoke check, and scans indexed files. It receives no university credentials.
+   A workflow file in Git is not evidence of a passing GitHub-hosted job.
+3. Repeat live authentication/restart tests in the target-version environment and
+   on `franz`. A fresh install or browser smoke pass cannot establish login reuse.
 
 Do not upgrade dependencies or browsers as part of this cleanup. The successful
 working environment remains available until the replacement is verified. See
@@ -69,11 +76,12 @@ sh -n scripts/setup scripts/m1 .githooks/pre-commit
 git diff --check
 ```
 
-After this cleanup expect **77 tests and OK**. The setup tests use temporary
+After the uv migration expect **78 tests and OK**. The setup tests use temporary
 synthetic checkouts, fake uv/Git/browser commands and the test interpreter. They
 check that matching environments are reused, mismatches stop before installation,
 new environments use the configured version, and unusable environments are
-preserved. No packages or browsers are installed by these tests. They run on the
+preserved. A failed locked sync stops before browser installation or Git changes.
+No packages or browsers are installed by these tests. They run on the
 current Python 3.14 environment too; this does not broaden the supported target.
 
 The other tests use synthetic fixtures and mocks for API validation,

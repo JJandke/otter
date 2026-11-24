@@ -1,5 +1,8 @@
 # M1 cleanup: setup consistency and current acceptance evidence
 
+This document records the preceding cleanup increment. For the subsequent
+native-lock migration and current test count, see [uv-lock.md](uv-lock.md).
+
 ## Branch and scope
 
 Continue `fix/m1-session-diagnostics`. The cleanup completes the same M1 work;

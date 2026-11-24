@@ -2,6 +2,7 @@
 .m1-state/
 .provadis-m1/
 .m1-gui/
+.m1-browsers/
 **/profile/
 **/profiles/
 **/browser-profile/

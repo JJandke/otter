@@ -16,7 +16,7 @@ if test -e .venv; then
 else
   uv venv --python "$python_version"
 fi
-uv pip sync --python .venv/bin/python requirements.lock
+UV_PROJECT_ENVIRONMENT="$project_dir/.venv" uv sync --locked --python .venv/bin/python
 .venv/bin/python -m playwright install chromium
 git config --local core.hooksPath .githooks
 echo 'Environment ready. Run ./scripts/m1 login to authenticate in the dedicated browser.'

@@ -35,6 +35,7 @@ class SetupTests(unittest.TestCase):
         self.executable(bin_dir / 'uv',
             '#!/bin/sh\n'
             'printf "uv %s\\n" "$*" >> "$SETUP_CALLS"\n'
+            'if test "$1" = "sync"; then exit "${SETUP_SYNC_EXIT:-0}"; fi\n'
             'if test "$1" = "venv"; then\n'
             '  mkdir -p .venv/bin\n'
             '  cp "$SETUP_WRAPPER" .venv/bin/python\n'
@@ -64,7 +65,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.calls.read_text()
         self.assertNotIn('uv venv', calls)
-        self.assertIn('uv pip sync --python .venv/bin/python requirements.lock', calls)
+        self.assertIn('uv sync --locked --python .venv/bin/python', calls)
         self.assertIn('browser -m playwright install chromium', calls)
         self.assertIn('git config --local core.hooksPath .githooks', calls)
 
@@ -91,3 +92,13 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 6)
         self.assertFalse(self.calls.exists())
         self.assertEqual(sentinel.read_text(), 'synthetic local work')
+
+    def test_failed_locked_sync_stops_before_browser_install_or_git_changes(self):
+        self.existing_environment()
+        self.env['SETUP_SYNC_EXIT'] = '42'
+        result = self.run_setup()
+        self.assertEqual(result.returncode, 42)
+        calls = self.calls.read_text()
+        self.assertIn('uv sync --locked', calls)
+        self.assertNotIn('browser ', calls)
+        self.assertNotIn('git ', calls)

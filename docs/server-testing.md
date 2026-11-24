@@ -25,11 +25,12 @@ and run dependency installation deliberately because it may use sudo:
 ```sh
 cd /home/ubuntu/provadis-m1
 uv venv --python 3.12.14
-uv pip sync --python .venv/bin/python requirements.lock
+uv sync --locked --python .venv/bin/python
 # Installs OS libraries required by the pinned Playwright browser; review sudo output.
 .venv/bin/python -m playwright install-deps chromium
 .venv/bin/python -m playwright install chromium
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python scripts/check_browser.py
 ```
 
 Ubuntu 22.04 is in Playwright's documented supported Linux family. Browser/kernel

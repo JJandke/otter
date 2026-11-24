@@ -10,9 +10,9 @@ portal; zero-navigation retrieval after a process restart is not demonstrated.
 Read-only inspection found the owner's current `.venv` uses Python **3.14.7**,
 while `.python-version` and `pyproject.toml` declare the Python **3.12** target
 (pin 3.12.14). Do not label the live evidence as Python 3.12 acceptance. The
-assistant's offline tests run separately under Python 3.12.14. A clean target-version
-installation and live validation, Ubuntu testing, longevity, idle recovery, and
-reauthentication evidence remain outstanding. Preserve the working profile and
+assistant has installed the locked dependencies in a separate clean Python 3.12.14
+environment and passed its offline tests. Live target-version validation, Ubuntu
+testing, longevity, idle recovery, and reauthentication evidence remain outstanding. Preserve the working profile and
 runtime during the existing measurement series.
 
 ### Sanitized owner-reported live evidence
@@ -44,7 +44,7 @@ identity-provider URLs, credentials, or raw log files belong in Git.
 | Credential/session protection | In-memory Bearer, private profile/lock, safe summaries, ignore rules, publication guard | Implemented; human review still required |
 | Invalid/missing responses cannot count as successful updates | Nonzero exit for all invalid/suspicious responses; no calendar writes exist | Covered by offline tests |
 | Isolation from old application | Dedicated paths, protected-path check, no production configuration code | Implemented; server untouched |
-| Python 3.12 / Ubuntu compatibility | Offline Python 3.12 tests pass; live target-version and server checks remain | Open |
+| Python 3.12 / Ubuntu compatibility | Fresh locked Python 3.12 installation and offline tests pass on macOS; live target-version and server checks remain | Open |
 | Longer-running renewal tests | Matrix and decision gates below; owner is measuring persistence | Results pending |
 
 ## What is confirmed, and by whom
@@ -124,8 +124,9 @@ References, checked 23 November 2026:
 Setup now reads the required version from `.python-version`, rejects a mismatched
 existing venv before installation, and does not replace it automatically. Validate
 Python 3.12 in a separate checkout/profile after choosing when to start its own
-session series. Native `uv.lock` migration, a clean dependency installation and a
-verified green CI run remain separate tasks. No runtime/browser upgrade is part
+session series. Native `uv.lock` migration and a clean macOS Python 3.12 dependency installation
+are complete. The updated Ubuntu CI workflow still needs a verified green run.
+See [uv-lock.md](uv-lock.md) for reproduction and review. No runtime/browser upgrade is part
 of this documentation cleanup.
 
 ## Live test matrix
