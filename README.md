@@ -1,3 +1,6 @@
+For visible credential tests, passkey refusal, current diagnostics and fresh-profile
+reset instructions, see [login-form-tests.md](docs/login-form-tests.md).
+
 # OTTER — Organised Timetable Translation and Event Retrieval
 
 Milestone M1: project foundation and authentication feasibility.

@@ -295,7 +295,10 @@ class BrowserBoundaryTests(unittest.TestCase):
             result = browser_run(Path('unused-synthetic-profile'), interactive=False,
                                  bootstrap_seconds=1, request_seconds=1, samples=1,
                                  sample_interval=0,
-                                 credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'))
+                                 credentials=LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET'),
+                                 decline_passkey=True)
+        context.add_init_script.assert_called_once()
+        self.assertIn('NotAllowedError', context.add_init_script.call_args.args[0])
         self.assertEqual(step, 2)
         self.assertTrue(result['diagnostics']['credential_password_submitted'])
         self.assertEqual(result['event_counts'], [2])

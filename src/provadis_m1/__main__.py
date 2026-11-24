@@ -41,10 +41,12 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--sample-interval", type=_interval, default=0)
     cli.add_argument("--portal-path", default=DEFAULT_PORTAL_PATH,
                      help="Same-origin timetable route (default: /student/schedule)")
-    cli.add_argument("--headed", action="store_true", help="Visible fetch for diagnosis; not verify")
+    cli.add_argument("--headed", action="store_true", help="Visible fetch or credential-assisted login; not verify")
     cli.add_argument("--headless", action="store_true", help="Explicit credential-assisted login only")
     cli.add_argument("--credentials-file", type=Path,
-                     help="Private credential file outside the repository; login --headless only")
+                     help="Private credential file outside the repository; login with --headed or --headless only")
+    cli.add_argument("--decline-passkey", action="store_true",
+                     help="Decline Microsoft WebAuthn requests; credential-assisted login only")
     cli.add_argument("--navigation-log", action="store_true",
                      help="Write a redacted JSONL click/navigation log in the private state directory")
     return cli
@@ -58,10 +60,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if any(os.environ.get(key) for key in ("DEBUG", "PWDEBUG", "SSLKEYLOGFILE")):
             raise ConfigurationError("disable_browser_debug_and_tls_key_logging")
-        if args.headless or args.credentials_file is not None:
-            if (args.command != 'login' or not args.headless
-                    or args.credentials_file is None or args.headed):
-                raise ConfigurationError('credentials_require_explicit_headless_login')
+        if args.headless or args.credentials_file is not None or args.decline_passkey:
+            if (args.command != 'login' or args.headless == args.headed
+                    or args.credentials_file is None):
+                raise ConfigurationError('credentials_require_explicit_login_mode')
         credentials = load_credentials(args.credentials_file) if args.credentials_file else None
         portal_url(args.portal_path)
         if args.headed and args.command == "verify":
@@ -71,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             if trace:
                 result["navigation_log"] = trace.path.name
             result["state_id"] = hashlib.sha256(str(profile.resolve()).encode()).hexdigest()[:12]
-            interactive = args.command == "login" and not args.headless
+            interactive = args.command == "login" and credentials is None
             if interactive:
                 print(
                     "Sign in in the dedicated Chromium window, then open your timetable. "
@@ -92,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                     headed=args.headed,
                     trace=trace,
                     credentials=credentials,
+                    decline_passkey=args.decline_passkey,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()

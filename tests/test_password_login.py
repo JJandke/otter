@@ -88,10 +88,16 @@ class PasswordLoginTests(unittest.TestCase):
         with self.assertRaises(BootstrapError):
             self.advance()
         self.locator(EMAIL).filter.return_value.fill.assert_not_called()
+
+    def test_combined_controls_submit_email_then_password_once(self):
         self.show(EMAIL, PASSWORD, BUTTON)
-        with self.assertRaises(BootstrapError):
-            self.advance()
-        self.locator(BUTTON).filter.return_value.click.assert_not_called()
+        self.advance()
+        self.locator(EMAIL).filter.return_value.fill.assert_called_once()
+        self.locator(PASSWORD).filter.return_value.fill.assert_not_called()
+        self.advance()
+        self.advance()
+        self.locator(PASSWORD).filter.return_value.fill.assert_called_once()
+        self.assertEqual(self.locator(BUTTON).filter.return_value.click.call_count, 2)
 
     def test_browser_error_cannot_leak_password_or_trigger_a_second_attempt(self):
         self.login.email_submitted = True

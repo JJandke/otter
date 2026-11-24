@@ -76,7 +76,7 @@ sh -n scripts/setup scripts/m1 .githooks/pre-commit
 git diff --check
 ```
 
-With the credential-assisted login feature expect **96 tests and OK**. The setup tests use temporary
+With the credential-assisted login feature expect **99 tests and OK**. The setup tests use temporary
 synthetic checkouts, fake uv/Git/browser commands and the test interpreter. They
 check that matching environments are reused, mismatches stop before installation,
 new environments use the configured version, and unusable environments are

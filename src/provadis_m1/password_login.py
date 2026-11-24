@@ -15,6 +15,7 @@ class PasswordLogin:
     email_submitted: bool = False
     password_submitted: bool = False
     keep_signed_in_clicked: bool = False
+    _last_form: tuple | None = field(default=None, repr=False)
     _email_attempted: bool = field(default=False, repr=False)
     _password_attempted: bool = field(default=False, repr=False)
     _keep_attempted: bool = field(default=False, repr=False)
@@ -23,6 +24,8 @@ class PasswordLogin:
         locator = page.locator(selector).filter(visible=True)
         count = locator.count()
         if count > 1:
+            if self.trace:
+                self.trace('selector_ambiguous', matches=count)
             raise BootstrapError('ambiguous_microsoft_login_control')
         return locator if count == 1 else None
 
@@ -52,9 +55,13 @@ class PasswordLogin:
         try:
             email = self._unique(page, 'input[name="loginfmt"]')
             password = self._unique(page, 'input[name="passwd"][type="password"]')
-            # Do not guess if more than one kind of login form is visible.
-            if email is not None and password is not None:
-                raise BootstrapError('ambiguous_microsoft_login_form')
+            state = (email is not None, password is not None)
+            if self.trace and state != self._last_form:
+                self.trace('microsoft_form', action='email_submit', matches=int(state[0]))
+                self.trace('microsoft_form', action='password_submit', matches=int(state[1]))
+            self._last_form = state
+            # Microsoft may keep both controls visible during initialization.
+            # Submit the email stage first; duplicate controls still fail closed.
             if email is not None and not self._email_attempted and not self._password_attempted:
                 button = self._unique(page, '#idSIButton9')
                 if button is not None:

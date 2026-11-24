@@ -1,3 +1,6 @@
+For visible credential tests, passkey refusal, current diagnostics and fresh-profile
+reset instructions, see [login-form-tests.md](login-form-tests.md).
+
 # M1: explicit credential-assisted headless login
 
 ## Scope and limitations

@@ -119,3 +119,18 @@ class CLITests(unittest.TestCase):
             self.assertEqual(code, 0)
             load.assert_not_called()
             self.assertIsNone(run.call_args.kwargs['credentials'])
+
+    def test_visible_credential_login_uses_same_automation(self):
+        from provadis_m1.credentials import LoginCredentials
+        with patch('provadis_m1.__main__.load_credentials', return_value=LoginCredentials('person@example.invalid', 'SYNTHETIC')):
+            code, _, run = self.invoke('login', return_value={'event_counts': [2]},
+                                       extra=('--headed', '--credentials-file', '/private.env', '--decline-passkey'))
+        self.assertEqual(code, 0)
+        self.assertTrue(run.call_args.kwargs['headed'])
+        self.assertFalse(run.call_args.kwargs['interactive'])
+        self.assertTrue(run.call_args.kwargs['decline_passkey'])
+
+    def test_passkey_option_cannot_change_normal_fetch(self):
+        code, _, run = self.invoke('fetch', extra=('--decline-passkey',))
+        self.assertEqual(code, 6)
+        run.assert_not_called()

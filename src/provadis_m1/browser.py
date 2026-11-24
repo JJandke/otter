@@ -155,6 +155,7 @@ def browser_run(
     headed: bool = False,
     trace: Any = None,
     credentials: LoginCredentials | None = None,
+    decline_passkey: bool = False,
 ) -> dict[str, Any]:
     # Lazy import keeps boundary tests runnable using only Python's standard library.
     try:
@@ -182,6 +183,11 @@ def browser_run(
                 raise ConfigurationError("browser_launch_failed") from None
             page = None
             try:
+                if decline_passkey:
+                    from .passkey import DECLINE_PASSKEY_SCRIPT
+                    context.add_init_script(DECLINE_PASSKEY_SCRIPT)
+                    if trace:
+                        trace('passkey_decline_enabled')
                 context.on("request", capture.observe)
                 context.on("response", capture.observe_response)
                 context.on("requestfailed", capture.observe_failed)

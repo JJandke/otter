@@ -43,3 +43,6 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Isolated disposable authentication experiments
+.m1-login-tests/
