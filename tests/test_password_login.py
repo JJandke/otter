@@ -163,3 +163,13 @@ class PasswordLoginTests(unittest.TestCase):
         with self.assertRaisesRegex(BootstrapError, 'ambiguous_password_choice'):
             self.advance()
         choice.click.assert_not_called()
+
+    def test_confirmed_password_choice_allows_retained_email_control(self):
+        self.login.email_submitted = True
+        self.login.password_choice_clicked = True
+        self.show(EMAIL, PASSWORD, BUTTON)
+        self.advance()
+        self.advance()
+        self.locator(PASSWORD).filter.return_value.fill.assert_called_once_with(SECRET, timeout=1000)
+        self.locator(EMAIL).filter.return_value.fill.assert_not_called()
+        self.assertTrue(self.login.password_submitted)

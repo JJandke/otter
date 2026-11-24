@@ -73,7 +73,7 @@ class PasswordLogin:
                     if self.trace:
                         self.trace('credential_step_completed', action='email_submit')
                 return
-            if (password is not None and email is None
+            if (password is not None and (email is None or self.password_choice_clicked)
                     and self.email_submitted and not self._password_attempted):
                 button = self._unique(page, '#idSIButton9')
                 if button is not None:
