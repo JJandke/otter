@@ -252,3 +252,79 @@ class NavigationTests(unittest.TestCase):
             self.advance(nav, page)
         self.assertEqual(str(raised.exception), 'ambiguous_my_studium')
         page.get_by_text.return_value.filter.return_value.click.assert_not_called()
+
+    def ready_dashboard(self):
+        page = self.page(count=0)
+        menu, schedule = Mock(), Mock()
+        menu.filter.return_value.count.return_value = 1
+        schedule.filter.return_value.count.return_value = 1
+        page.get_by_text.side_effect = lambda label, **kw: {
+            'Mein Studium': menu, 'Stundenplan': schedule}[label]
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        return nav, page, menu, schedule
+
+    def visit_schedule(self, nav):
+        nav.observe_location(TARGET, portal_origin=ORIGIN, target_url=TARGET)
+
+    def test_schedule_redirect_retries_dashboard_once_then_stops(self):
+        nav, page, menu, schedule = self.ready_dashboard()
+        trace = nav.trace = Mock()
+        self.advance(nav, page)
+        self.advance(nav, page)
+        self.visit_schedule(nav)  # A brief route can occur between polling ticks.
+        self.advance(nav, page)   # Portal has returned to the authenticated /.
+        self.advance(nav, page)
+        self.assertEqual(nav.dashboard_retries, 1)
+        self.assertEqual(menu.filter.return_value.click.call_count, 2)
+        self.assertEqual(schedule.filter.return_value.click.call_count, 2)
+        trace.assert_any_call('dashboard_retry')
+        # A second bounce must not create an unlimited navigation loop.
+        self.visit_schedule(nav)
+        for _ in range(3):
+            self.advance(nav, page)
+        self.assertEqual(menu.filter.return_value.click.call_count, 2)
+        self.assertEqual(schedule.filter.return_value.click.call_count, 2)
+        page.goto.assert_not_called()
+        page.get_by_role.return_value.filter.return_value.click.assert_not_called()
+
+    def test_no_retry_while_click_is_pending_or_schedule_stays_open(self):
+        nav, page, menu, schedule = self.ready_dashboard()
+        self.advance(nav, page)
+        self.advance(nav, page)
+        self.advance(nav, page)  # Same dashboard URL before route transition.
+        self.assertEqual(nav.dashboard_retries, 0)
+        page.url = TARGET
+        self.advance(nav, page)
+        self.advance(nav, page)
+        self.assertEqual(menu.filter.return_value.click.call_count, 1)
+        self.assertEqual(schedule.filter.return_value.click.call_count, 1)
+
+    def test_retry_waits_for_unique_authenticated_dashboard_card(self):
+        nav, page, menu, schedule = self.ready_dashboard()
+        self.advance(nav, page)
+        self.advance(nav, page)
+        self.visit_schedule(nav)
+        menu.filter.return_value.count.return_value = 0
+        self.advance(nav, page)
+        self.assertEqual(nav.dashboard_retries, 0)
+        menu.filter.return_value.count.return_value = 2
+        with self.assertRaisesRegex(BootstrapError, 'ambiguous_my_studium'):
+            self.advance(nav, page)
+        self.assertEqual(nav.dashboard_retries, 0)
+        self.assertEqual(menu.filter.return_value.click.call_count, 1)
+
+    def test_route_recovery_ignores_callbacks_untrusted_origins_and_credential_pages(self):
+        for url in (TARGET + '?code=SECRET', TARGET + '#SECRET',
+                    TARGET.replace('https:', 'http:'),
+                    'https://example.invalid/student/schedule',
+                    'https://login.microsoftonline.com/student/schedule',
+                    ORIGIN + 'student/overview'):
+            nav, page, menu, schedule = self.ready_dashboard()
+            self.advance(nav, page)
+            self.advance(nav, page)
+            nav.observe_location(url, portal_origin=ORIGIN, target_url=TARGET)
+            self.advance(nav, page)
+            self.assertEqual(nav.dashboard_retries, 0)
+            self.assertEqual(menu.filter.return_value.click.call_count, 1)
+            self.assertNotIn('SECRET', json.dumps(nav.diagnostics()))

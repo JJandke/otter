@@ -14,7 +14,7 @@ EVENTS = {
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
     'navigation_request', 'navigation_response', 'navigation_failed', 'page_location',
-    'selector_missing',
+    'selector_missing', 'dashboard_retry',
     'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
 }
 ACTIONS = {

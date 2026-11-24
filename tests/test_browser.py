@@ -190,3 +190,60 @@ class BrowserBoundaryTests(unittest.TestCase):
             direct_fetch(context, "Bearer SYNTHETIC", 1000, SyntheticPlaywrightError)
         response.body.assert_not_called()
         response.dispose.assert_called_once()
+
+    def test_brief_schedule_redirect_recovers_without_navigation_logging(self):
+        from provadis_m1.navigation import StudentNavigation
+
+        page = Mock(url=PORTAL_URL)
+        context = Mock(pages=[page])
+        page_events, context_events = {}, {}
+        page.on.side_effect = lambda event, callback: page_events.update({event: callback})
+        context.on.side_effect = lambda event, callback: context_events.update({event: callback})
+        page.get_by_role.return_value.filter.return_value.count.return_value = 0
+        menu, schedule = Mock(), Mock()
+        menu.filter.return_value.count.return_value = 1
+        schedule.filter.return_value.count.return_value = 1
+        page.get_by_text.side_effect = lambda label, **kw: {
+            'Mein Studium': menu, 'Stundenplan': schedule}[label]
+        nav = StudentNavigation(student_entry_clicked=True, sign_in_clicked=True,
+                                student_sso_clicked=True)
+        attempts = 0
+
+        def timetable_click(**_kwargs):
+            nonlocal attempts
+            attempts += 1
+            # Child-frame navigation must not count as opening the timetable.
+            page_events['framenavigated'](Mock(url=PORTAL_URL + 'student/schedule'))
+            self.assertFalse(nav._schedule_route_seen)
+            page.main_frame.url = page.url = PORTAL_URL + 'student/schedule'
+            page_events['framenavigated'](page.main_frame)
+            if attempts == 1:
+                # Full return to / happens before the next polling tick.
+                page.main_frame.url = page.url = PORTAL_URL
+                page_events['framenavigated'](page.main_frame)
+            else:
+                request = self.request()
+                context_events['request'](request)
+                context_events['response'](Mock(url=API_URL, request=request, status=200))
+
+        schedule.filter.return_value.click.side_effect = timetable_click
+        playwright = Mock()
+        playwright.chromium.launch_persistent_context.return_value = context
+        manager = Mock()
+        manager.__enter__ = Mock(return_value=playwright)
+        manager.__exit__ = Mock(return_value=False)
+        module = types.ModuleType('playwright.sync_api')
+        module.Error = SyntheticPlaywrightError
+        module.sync_playwright = Mock(return_value=manager)
+        with patch.dict('sys.modules', {'playwright.sync_api': module}), \
+                patch('provadis_m1.browser.StudentNavigation', return_value=nav), \
+                patch('provadis_m1.browser.direct_fetch', return_value=Mock(event_count=2)):
+            result = browser_run(Path('unused-synthetic-profile'), interactive=False,
+                                 bootstrap_seconds=1, request_seconds=1, samples=2,
+                                 sample_interval=0)
+        self.assertEqual(result['direct_api_samples'], 2)
+        self.assertEqual(result['diagnostics']['dashboard_retries'], 1)
+        self.assertEqual(attempts, 2)
+        self.assertFalse(result['diagnostics']['browser_mode'] == 'headed')
+        page.goto.assert_called_once()
+        context.close.assert_called_once()

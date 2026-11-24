@@ -13,6 +13,13 @@ PORTAL = 'https://hvsweb.provadis-hochschule.de'
 
 
 class NavigationLogTests(unittest.TestCase):
+    def test_dashboard_retry_has_only_fixed_diagnostic_fields(self):
+        with tempfile.TemporaryDirectory() as temp, NavigationLog(Path(temp)) as log:
+            log('dashboard_retry')
+            row = json.loads(log.path.read_text().splitlines()[-1])
+            self.assertEqual(row['event'], 'dashboard_retry')
+            self.assertEqual(set(row), {'sequence', 'at', 'elapsed_ms', 'event'})
+
     def test_url_redaction_covers_callbacks_credentials_and_unknown_routes(self):
         urls = [
             PORTAL + '/?code=SECRET&email=person@example.invalid#id_token=SECRET',

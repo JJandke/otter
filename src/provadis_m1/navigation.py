@@ -21,6 +21,38 @@ class StudentNavigation:
     my_studium_clicked: bool = False
     timetable_link_clicked: bool = False
     schedule_navigation_attempted: bool = False
+    dashboard_retries: int = 0
+    _schedule_route_seen: bool = field(default=False, repr=False)
+
+    def observe_location(self, url: str, *, portal_origin: str, target_url: str) -> None:
+        """Observe routes only; a timetable URL is not proof of valid API data."""
+        current, origin, target = map(urlsplit, (url, portal_origin, target_url))
+        if ((current.scheme, current.netloc) == (origin.scheme, origin.netloc)
+                and current.path == target.path == DEFAULT_PORTAL_PATH
+                and not current.query and not current.fragment
+                and self.timetable_link_clicked):
+            self._schedule_route_seen = True
+
+    def _recover_dashboard(self, page: Any) -> None:
+        # A logged run reached /student/schedule, then the portal replaced it
+        # with /. Retry only when the confirmed authenticated card reappears.
+        # No timers, document reloads, SSO replay, or unlimited click loops.
+        if (not self._schedule_route_seen or not self.timetable_link_clicked
+                or self.dashboard_retries >= 1):
+            return
+        count = page.get_by_text("Mein Studium", exact=True).filter(visible=True).count()
+        if count > 1:
+            if self.trace:
+                self.trace("selector_ambiguous", action="my_studium_clicked", matches=count)
+            raise BootstrapError("ambiguous_my_studium")
+        if count == 0:
+            return
+        self.dashboard_retries += 1
+        self._schedule_route_seen = False
+        self.my_studium_clicked = False
+        self.timetable_link_clicked = False
+        if self.trace:
+            self.trace("dashboard_retry")
 
     def _click_once(self, locator: Any, flag: str, timeout_ms: int, pw_error: type) -> bool:
         if getattr(self, flag):
@@ -54,6 +86,7 @@ class StudentNavigation:
         now: float, timeout_ms: int, pw_error: type,
     ) -> None:
         current = urlsplit(page.url)
+        self.observe_location(page.url, portal_origin=portal_origin, target_url=target_url)
         origin = urlsplit(portal_origin)
         target = urlsplit(target_url)
         current_origin = (current.scheme, current.netloc)
@@ -94,6 +127,8 @@ class StudentNavigation:
             return
         if not target.path.startswith("/student/"):
             return
+        if is_landing:
+            self._recover_dashboard(page)
         # The two portal menu labels were reported by the owner. Their actual DOM
         # selectors still need live verification; only unique visible matches click.
         if target.path == DEFAULT_PORTAL_PATH:
@@ -117,7 +152,7 @@ class StudentNavigation:
         # No page.goto fallback: a full document reload returned to the landing
         # page in the owner's trace. Wait for portal navigation or fail closed.
 
-    def diagnostics(self) -> dict[str, bool]:
+    def diagnostics(self) -> dict[str, bool | int]:
         return {
             "student_entry_clicked": self.student_entry_clicked,
             "post_sso_student_entry_clicked": self.post_sso_student_entry_clicked,
@@ -126,4 +161,5 @@ class StudentNavigation:
             "my_studium_clicked": self.my_studium_clicked,
             "timetable_link_clicked": self.timetable_link_clicked,
             "schedule_navigation_attempted": self.schedule_navigation_attempted,
+            "dashboard_retries": self.dashboard_retries,
         }

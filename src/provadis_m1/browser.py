@@ -183,6 +183,16 @@ def browser_run(
                 context.on("requestfailed", capture.observe_failed)
                 page = context.pages[0] if context.pages else context.new_page()
                 page.on("pageerror", capture.observe_page_error)
+                target_url = portal_url(portal_path)
+
+                def observe_main_frame(frame: Any) -> None:
+                    if frame == page.main_frame:
+                        navigation.observe_location(
+                            frame.url, portal_origin=PORTAL_URL, target_url=target_url
+                        )
+
+                # Observe even brief SPA route changes, independently of logging.
+                page.on("framenavigated", observe_main_frame)
                 if trace:
                     trace("browser_started")
                     attach_navigation_log(page, trace)
@@ -205,7 +215,7 @@ def browser_run(
                         trace.observe_url(page.url)
                     remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
                     navigation.advance(
-                        page, portal_origin=PORTAL_URL, target_url=portal_url(portal_path),
+                        page, portal_origin=PORTAL_URL, target_url=target_url,
                         now=time.monotonic(),
                         timeout_ms=min(request_seconds * 1000, remaining_ms),
                         pw_error=PlaywrightError,
