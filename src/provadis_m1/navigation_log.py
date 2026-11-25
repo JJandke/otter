@@ -9,8 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .auth_flow import UI_ERROR_KINDS, UI_OPERATIONS
+
 EVENTS = {
     'auth_state', 'auth_action', 'auth_action_completed', 'session_reauthentication',
+    'auth_action_suppressed', 'auth_ui_error',
     'log_started', 'log_finished', 'browser_started', 'browser_finished',
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',
@@ -75,7 +78,11 @@ class NavigationLog:
             self.file.close()
 
     def __call__(self, event: str, *, action=None, url=None, outcome=None,
-                 status=None, matches=None, state=None):
+                 status=None, matches=None, state=None, operation=None, error_kind=None):
+        if operation is not None and operation not in UI_OPERATIONS:
+            raise ValueError('unrecognized UI operation')
+        if error_kind is not None and error_kind not in UI_ERROR_KINDS:
+            raise ValueError('unrecognized UI error category')
         if state not in (None, "starting", "redirect", "student", "portal_login",
                          "b2c_microsoft", "b2c_student", "email", "password",
                          "password_choice", "kmsi", "study", "schedule", "timetable",
@@ -93,12 +100,15 @@ class NavigationLog:
             return
         if self.sequence == 1999:
             event, action, url, outcome, status, matches = 'limit_reached', None, None, None, None, None
+            state, operation, error_kind = None, None, None
         self.sequence += 1
         row = {
             'sequence': self.sequence, 'at': datetime.now(timezone.utc).isoformat(),
             'elapsed_ms': round((time.monotonic() - self.started) * 1000), 'event': event,
         }
-        for key, value in (('action', action), ('outcome', outcome), ('status', status), ('matches', matches), ('state', state)):
+        for key, value in (('action', action), ('outcome', outcome), ('status', status),
+                           ('matches', matches), ('state', state), ('operation', operation),
+                           ('error_kind', error_kind)):
             if value is not None:
                 row[key] = value
         if url is not None:

@@ -282,10 +282,11 @@ def browser_run(
                         continue
                     raise
                 except PlaywrightError as error:
+                    kind = flow.record_ui_error(error, PlaywrightTimeout)
                     if current.is_closed():
                         active_page()
                         continue
-                    if "Execution context was destroyed" in str(error):
+                    if kind == "context_destroyed":
                         # Redirect raced a state probe. Any attempted action is
                         # already marked, so re-detection cannot blindly repeat it.
                         continue
@@ -294,6 +295,7 @@ def browser_run(
                     break
                 # Give the portal its normal bootstrap budget to renew a stale
                 # session before restarting it. A 401 can precede a valid GET.
+                flow.operation = "wait_for_change"
                 wait_for_change(current, remaining, PlaywrightTimeout, PlaywrightError)
 
         try:

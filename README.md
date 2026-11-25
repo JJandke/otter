@@ -13,6 +13,11 @@ navigation model, testing, diagnostics, rollback, GitHub Issues and merge criter
 It supersedes earlier navigation/password-stage documents in `docs/`, retained
 as historical investigation notes. See [the verification record](docs/m1-rebuild-verification.md).
 
+The follow-up [SSO return diagnosis and M1 completion plan](docs/m1-sso-return-race.md)
+prevents repeated entry clicks during callback completion and adds sanitized UI
+error categories. Entry controls act once per authentication attempt; only the
+existing explicit 401 recovery resets that entry guard.
+
 ## Run
 
 Use the existing environment without replacing it during a session-longevity
@@ -82,7 +87,7 @@ OTTER_BROWSER_TESTS=1 PYTHONPATH=src .venv/bin/python -m unittest discover \
 
 These use real Chromium with every network request routed locally, synthetic
 transitions and sanitized captured controls. They do not run Microsoft's login
-JavaScript. Normal unittest discovery skips these five opt-in tests.
+JavaScript. Normal unittest discovery skips these six opt-in tests.
 
 | Exit | Category | Meaning |
 | --- | --- | --- |

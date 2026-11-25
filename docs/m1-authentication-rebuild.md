@@ -84,8 +84,9 @@ diagnostics. New hosts require review before sending credentials.
 ## C. Implementation
 
 - `auth_flow.py` detects current controls, checks origins, bounds actions, and waits
-  for document/DOM changes. Email/password submit once per run. Other actionable
-  states can act at most twice across separate visits; a stable state never re-clicks.
+  for document/DOM changes. Email/password submit once per run. Other navigation
+  states can act at most twice across separate visits; entry controls now act only
+  once per attempt. See [the SSO-return follow-up](m1-sso-return-race.md).
 - `browser.py` shares persistent-session handling and allows one 401 recovery.
   It observes optional popups, closes surplus restored tabs before starting, and
   validates the fixed direct API GET. It never reads browser token stores.
@@ -121,7 +122,7 @@ The normal suite uses sanitized HTML with a small selector adapter and mocked
 Playwright navigation/API responses. It tests branching, error and retry budgets,
 API parsing, credential restrictions and diagnostic contracts, not browser rendering.
 
-Five opt-in tests use actual Chromium with every network request routed locally.
+Six opt-in tests use actual Chromium with every network request routed locally.
 They test real locators on 15 fixtures, synthetic dry/wet transitions, persistent
 cookie restart, the passkey rejection wrapper, DOM waits and safe projections.
 They do not execute Microsoft's JavaScript or prove native Cancel behavior.
@@ -173,8 +174,8 @@ OTTER_BROWSER_TESTS=1 PYTHONPATH=src .venv/bin/python -m unittest discover \
   -s tests -p test_auth_browser.py -v
 ```
 
-The first command should pass with exactly five browser tests skipped. The last
-must pass all five on an unrestricted host; it makes no live authentication calls.
+The first command should pass with exactly six browser tests skipped. The last
+must pass all six on an unrestricted host; it makes no live authentication calls.
 If Chromium is absent, install it with `.venv/bin/python -m playwright install chromium`.
 
 Check the declared runtime in a separate environment, preserving the existing

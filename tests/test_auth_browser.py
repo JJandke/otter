@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from auth_support import FIXTURES
 from test_auth_flow import CREDS, DRY
 from test_auth_runner import WET
-from provadis_m1.auth_flow import MICROSOFT, PORTAL, AuthFlow, controls, wait_for_change
+from provadis_m1.auth_flow import B2C, MICROSOFT, PORTAL, AuthFlow, controls, wait_for_change
 from provadis_m1.browser import API_URL
 from provadis_m1.failure_diagnostics import capture_failure
 from provadis_m1.passkey import DECLINE_PASSKEY_SCRIPT
@@ -131,6 +131,42 @@ class ChromiumFixtureTests(unittest.TestCase):
         page.evaluate("() => setTimeout(() => document.body.dataset.test = 'changed', 100)")
         wait_for_change(page, 3000, self.pw_timeout, self.pw_error)
         self.assertEqual(page.locator("body").get_attribute("data-test"), "changed")
+
+    def test_returned_login_button_is_visible_but_is_not_clicked_again(self):
+        context = self.launch()
+        documents = {
+            PORTAL + "/login/student": "WetLogin-2_Hochschulportal.html",
+            B2C + "/provider": "DryLogin-3_Anmeldung.html",
+            PORTAL + "/": "WetLogin-3_Hochschulportal.html",
+        }
+
+        def route(request):
+            fixture = documents.get(request.request.url)
+            if fixture is None:
+                request.abort()
+            else:
+                request.fulfill(content_type="text/html", body=(FIXTURES / fixture).read_text())
+
+        context.route("**/*", route)
+        page = context.pages[0] if context.pages else context.new_page()
+        flow = AuthFlow()
+        # Navigation here is explicitly synthetic, with real Chromium controls.
+        page.goto(PORTAL + "/login/student")
+        self.assertTrue(flow.advance(page, now=1, timeout_ms=3000))
+        page.goto(B2C + "/provider")
+        self.assertTrue(flow.advance(page, now=2, timeout_ms=3000))
+        page.goto(PORTAL + "/login/student")
+        button = controls(page)["portal_login"]
+        self.assertTrue(button.is_visible())
+        button.evaluate("n => n.addEventListener('click', () => document.body.dataset.replayed = 'yes')")
+        self.assertFalse(flow.advance(page, now=3, timeout_ms=3000))
+        self.assertIsNone(page.locator("body").get_attribute("data-replayed"))
+        page.set_content("<!doctype html><body></body>")
+        self.assertFalse(flow.advance(page, now=4, timeout_ms=3000))
+        page.goto(PORTAL + "/")
+        self.assertTrue(flow.advance(page, now=5, timeout_ms=3000))
+        self.assertEqual(flow.actions["portal_login"], 1)
+        self.assertEqual(flow.state, "study")
 
     def test_failure_projection_screenshots_only_sanitized_controls(self):
         context = self.launch()

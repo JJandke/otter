@@ -6,6 +6,7 @@ OAuth parameters, storage, or arbitrary page text for state detection.
 
 import time
 from collections import Counter
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
@@ -23,6 +24,33 @@ TRUSTED = {PORTAL, B2C, MICROSOFT, FIDO, "https://login.live.com"}
 # visible. Exclude Microsoft's captured moveOffScreen class explicitly.
 EMAIL = 'input#i0116[name="loginfmt"]:not(.moveOffScreen)'
 PASSWORD = 'input#i0118[name="passwd"][type="password"]:not(.moveOffScreen)'
+
+# One entry sequence per bootstrap attempt. The two B2C buttons are aliases.
+# A transient return to these controls after SSO is not permission to start SSO
+# again. Explicit 401 recovery starts a new attempt; global budgets still apply.
+ENTRY_ACTIONS = {
+    "student": "student", "portal_login": "portal_login",
+    "b2c_microsoft": "provider", "b2c_student": "provider",
+}
+UI_OPERATIONS = {"detect", "resolve_control", "verify_document", "fill_control",
+                 "check_control", "click_control", "wait_for_change"}
+UI_ERROR_KINDS = {"timeout", "element_detached", "context_destroyed", "browser_closed", "other"}
+
+
+def ui_error_kind(error: Exception, timeout_type: type) -> str:
+    """Reduce an exception to a fixed category; never retain/emit its raw text."""
+    if isinstance(error, timeout_type):
+        return "timeout"
+    message = str(error).lower()
+    if any(marker in message for marker in (
+        "execution context was destroyed", "cannot find context with specified id",
+    )):
+        return "context_destroyed"
+    if "not attached to the dom" in message or "element is detached" in message:
+        return "element_detached"
+    if "target page, context or browser has been closed" in message:
+        return "browser_closed"
+    return "other"
 
 
 def origin(url: str) -> str:
@@ -73,6 +101,10 @@ class AuthFlow:
     _entered: float = 0
     _acted: bool = False
     _credential_attempts: set[str] = field(default_factory=set, repr=False)
+    _entry_attempts: set[str] = field(default_factory=set, repr=False)
+    _suppressed_logged: set[str] = field(default_factory=set, repr=False)
+    operation: str = "detect"
+    last_ui_error_kind: str | None = None
 
     def detect(self, page: Any) -> tuple[str, Any | None]:
         url = urlsplit(page.url)
@@ -119,10 +151,12 @@ class AuthFlow:
         # Bind the element to its document before filling; a locator could
         # otherwise re-resolve on an untrusted document during a redirect.
         action_deadline = time.monotonic() + timeout_ms / 1000
+        self.operation = "resolve_control"
         element = locator.element_handle(timeout=timeout_ms)
         if element is None:
             raise BootstrapError("authentication_control_disappeared")
         try:
+            self.operation = "verify_document"
             status = element.evaluate(
                 "(node, expected) => node.ownerDocument.location.origin !== expected.host ? "
                 "'origin_changed' : (expected.marker && "
@@ -135,15 +169,22 @@ class AuthFlow:
                 raise BootstrapError("authentication_form_changed")
             timeout_ms = max(1, int((action_deadline - time.monotonic()) * 1000))
             if value is not None:
+                self.operation = "fill_control"
                 element.fill(value, timeout=timeout_ms)
             elif check:
+                self.operation = "check_control"
                 element.set_checked(True, timeout=timeout_ms)
             else:
+                self.operation = "click_control"
                 element.click(timeout=timeout_ms)
         finally:
-            element.dispose()
+            # Handle disposal is cleanup, not evidence that the action failed.
+            # A destroyed document must not mask an earlier operation's error.
+            with suppress(Exception):
+                element.dispose()
 
     def advance(self, page: Any, *, now: float, timeout_ms: int) -> bool:
+        self.operation = "detect"
         state, item = self.detect(page)
         if state != self.state:
             self.state, self._entered, self._acted = state, now, False
@@ -153,6 +194,12 @@ class AuthFlow:
             raise BootstrapError("authentication_state_timeout_" + state)
         if self._acted or state in {"redirect", "unknown", "native_passkey", "timetable"}:
             return False
+        entry = ENTRY_ACTIONS.get(state)
+        if entry is not None and entry in self._entry_attempts:
+            if self.trace and state not in self._suppressed_logged:
+                self.trace("auth_action_suppressed", state=state)
+                self._suppressed_logged.add(state)
+            return False  # Await the portal-owned redirect/render, within existing timeouts.
         if state in {"email", "password"} and self.credentials is None:
             if not self.manual:
                 raise AuthenticationError("session_requires_interactive_login")
@@ -171,6 +218,8 @@ class AuthFlow:
         if self.actions[state] >= 2:
             raise BootstrapError("authentication_transition_limit_" + state)
         self._acted = True  # Never repeat a partially completed action.
+        if entry is not None:
+            self._entry_attempts.add(entry)
         self.actions[state] += 1
         if self.trace:
             self.trace("auth_action", state=state)
@@ -198,11 +247,26 @@ class AuthFlow:
         return True
 
     def after_expiry(self) -> None:
-        # Permit a single new visit; per-state and credential budgets survive.
+        # The browser driver permits one explicit 401 recovery. Start its entry
+        # sequence afresh; cumulative state/credential budgets survive.
         self.state, self._entered, self._acted = "starting", 0, False
+        self._entry_attempts.clear()
+        self._suppressed_logged.clear()
+
+    def record_ui_error(self, error: Exception, timeout_type: type) -> str:
+        kind = ui_error_kind(error, timeout_type)
+        self.last_ui_error_kind = kind
+        if self.trace:
+            self.trace("auth_ui_error", state=self.state,
+                       operation=self.operation, error_kind=kind)
+        return kind
 
     def diagnostics(self) -> dict:
-        return {"auth_state": self.state, "auth_actions": dict(self.actions)}
+        result = {"auth_state": self.state, "auth_actions": dict(self.actions),
+                  "auth_operation": self.operation}
+        if self.last_ui_error_kind is not None:
+            result["last_ui_error_kind"] = self.last_ui_error_kind
+        return result
 
 
 # A document-local counter wakes the driver on real DOM changes; no sleeps or
@@ -234,7 +298,7 @@ def wait_for_change(page: Any, timeout_ms: int, pw_timeout: type, pw_error: type
     except pw_error as error:
         if page.is_closed():
             raise AuthenticationError("browser_closed_before_authentication") from None
-        if "Execution context was destroyed" not in str(error):
+        if ui_error_kind(error, pw_timeout) != "context_destroyed":
             raise BootstrapError("authentication_wait_failed") from None
         # A cross-document redirect destroyed this wait. Re-detect under the
         # same global deadline without repeating already attempted actions.
