@@ -1,5 +1,13 @@
 # Authentication and reauthentication
 
+> Current status and policy (25 November 2026): see [M1 acceptance](m1-acceptance.md).
+> The owner reports successful Mac/Ubuntu checks and a successful ~24-hour rerun.
+> Explicit credential-enabled fetch/verify and the finite test runner are now
+> implemented; their new live acceptance is pending. Manual reauthentication is
+> not an acceptable normal operating policy. The older observations below are
+> retained as historical evidence and are superseded where behavior differs.
+
+
 For a successful login followed by failed fetch/verify, first follow
 [restart diagnosis](development.md). A missing observed timetable request now
 uses category `bootstrap`, exit 8, with safe diagnostics. It does not establish

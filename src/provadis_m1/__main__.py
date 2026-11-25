@@ -9,11 +9,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .browser import browser_run, portal_url
+from .browser import DEFAULT_PORTAL_PATH, browser_run, portal_url
 from .credentials import load_credentials
 from .errors import ConfigurationError, M1Error
 from .state import private_state
-from .browser import DEFAULT_PORTAL_PATH
 from .navigation_log import NavigationLog
 
 
@@ -42,11 +41,11 @@ def parser() -> argparse.ArgumentParser:
     cli.add_argument("--portal-path", default=DEFAULT_PORTAL_PATH,
                      help="Same-origin timetable route (default: /student/schedule)")
     cli.add_argument("--headed", action="store_true", help="Visible fetch or credential-assisted login; not verify")
-    cli.add_argument("--headless", action="store_true", help="Explicit credential-assisted login only")
+    cli.add_argument("--headless", action="store_true", help="Explicit headless mode; login requires a credential file")
     cli.add_argument("--credentials-file", type=Path,
-                     help="Private credential file outside the repository; login with --headed or --headless only")
+                     help="Authorize automatic authentication using a private file outside the repository")
     cli.add_argument("--decline-passkey", action="store_true",
-                     help="Decline Microsoft WebAuthn requests; credential-assisted login only")
+                     help="Decline Microsoft WebAuthn requests; requires --credentials-file")
     cli.add_argument("--failure-pause-seconds", type=_interval, default=0,
                      help="Keep a failed headed browser open for 0-60 seconds")
     cli.add_argument("--keep-open-on-error", action="store_true",
@@ -66,10 +65,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if any(os.environ.get(key) for key in ("DEBUG", "PWDEBUG", "SSLKEYLOGFILE")):
             raise ConfigurationError("disable_browser_debug_and_tls_key_logging")
-        if args.headless or args.credentials_file is not None or args.decline_passkey:
-            if (args.command != 'login' or args.headless == args.headed
-                    or args.credentials_file is None):
-                raise ConfigurationError('credentials_require_explicit_login_mode')
+        if args.headless and args.headed:
+            raise ConfigurationError('credentials_require_explicit_login_mode')
+        if args.command == "login" and (
+            args.credentials_file is not None and not (args.headless or args.headed)
+            or args.headless and args.credentials_file is None
+        ):
+            raise ConfigurationError('credentials_require_explicit_login_mode')
+        if args.decline_passkey and args.credentials_file is None:
+            raise ConfigurationError('passkey_decline_requires_credentials')
+        if args.command == "verify" and args.headed:
+            raise ConfigurationError("verify_requires_headless_browsers")
         credentials = load_credentials(args.credentials_file) if args.credentials_file else None
         visible = args.headed or (args.command == "login" and credentials is None)
         if args.keep_open_on_error and (not visible or args.command == "verify"):
@@ -115,8 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()
             result.update({"ok": True, "category": "validated_snapshot", "browser_runs": runs})
+            credential_submission_used = any(
+                any(run.get("diagnostics", {}).get("auth_actions", {}).get(step, 0) > 0
+                    for step in ("email", "password")) for run in runs
+            )
+            result["credential_submission_used"] = credential_submission_used
             if args.command == "verify":
-                result["restart_reuse_demonstrated"] = True
+                result["restart_reuse_demonstrated"] = not credential_submission_used
                 result["unattended_retrieval_demonstrated"] = True
     except M1Error as error:
         result.update({"category": error.category, "reason": error.reason})

@@ -46,3 +46,6 @@ build/
 
 # Isolated disposable authentication experiments
 .m1-login-tests/
+
+# Private finite acceptance runs and their browser profiles
+.m1-acceptance/

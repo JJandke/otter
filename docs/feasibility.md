@@ -1,5 +1,13 @@
 # M1 feasibility assessment
 
+> Current status and policy (25 November 2026): see [M1 acceptance](m1-acceptance.md).
+> The owner reports successful Mac/Ubuntu checks and a successful ~24-hour rerun.
+> Explicit credential-enabled fetch/verify and the finite test runner are now
+> implemented; their new live acceptance is pending. Manual reauthentication is
+> not an acceptable normal operating policy. The older observations below are
+> retained as historical evidence and are superseded where behavior differs.
+
+
 **Assessment on 24 November 2026: local short-term authentication feasibility
 has been demonstrated by the owner; M1 remains open.** Headless fetch validated
 80 events, followed by two headless browser lifetimes with two direct samples each.

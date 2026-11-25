@@ -84,10 +84,8 @@ class CLITests(unittest.TestCase):
         self.assertNotIn('navigation_log', normal)
         self.assertIsNone(normal_run.call_args.kwargs['trace'])
 
-    def test_credentials_are_only_accepted_for_explicit_headless_login(self):
+    def test_invalid_credential_login_modes_are_rejected_before_reading_file(self):
         for command, flags in (
-            ('fetch', ('--headless', '--credentials-file', '/never-read.env')),
-            ('verify', ('--headless', '--credentials-file', '/never-read.env')),
             ('login', ('--credentials-file', '/never-read.env')),
             ('login', ('--headless',)),
             ('login', ('--headed', '--headless', '--credentials-file', '/never-read.env')),
@@ -163,3 +161,34 @@ class CLITests(unittest.TestCase):
         self.assertEqual(code, 6)
         self.assertEqual(result["reason"], "only_captured_timetable_route_supported")
         run.assert_not_called()
+
+    def test_fetch_and_verify_can_explicitly_authorize_automatic_authentication(self):
+        from provadis_m1.credentials import LoginCredentials
+        credentials = LoginCredentials('person@example.invalid', 'SYNTHETIC-SECRET')
+        for command in ('fetch', 'verify'):
+            with self.subTest(command=command), patch(
+                'provadis_m1.__main__.load_credentials', return_value=credentials
+            ):
+                code, result, run = self.invoke(command, return_value={
+                    'event_counts': [2, 2], 'diagnostics': {'auth_actions': {'password': 1}}
+                }, extra=('--credentials-file', '/private.env', '--decline-passkey'))
+            self.assertEqual(code, 0)
+            self.assertTrue(result['credential_submission_used'])
+            self.assertTrue(all(c.kwargs['credentials'] is credentials for c in run.call_args_list))
+            self.assertTrue(all(not c.kwargs['interactive'] for c in run.call_args_list))
+            self.assertNotIn(credentials.password, json.dumps(result))
+            if command == 'verify':
+                self.assertFalse(result['restart_reuse_demonstrated'])
+                self.assertTrue(result['unattended_retrieval_demonstrated'])
+
+    def test_available_credentials_do_not_imply_that_they_were_submitted(self):
+        from provadis_m1.credentials import LoginCredentials
+        with patch('provadis_m1.__main__.load_credentials', return_value=LoginCredentials(
+            'person@example.invalid', 'SYNTHETIC-SECRET'
+        )):
+            code, result, _ = self.invoke('verify', return_value={
+                'event_counts': [2, 2], 'diagnostics': {'auth_actions': {'study': 1}}
+            }, extra=('--credentials-file', '/private.env'))
+        self.assertEqual(code, 0)
+        self.assertFalse(result['credential_submission_used'])
+        self.assertTrue(result['restart_reuse_demonstrated'])
