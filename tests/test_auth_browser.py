@@ -11,6 +11,7 @@ import time
 import unittest
 from pathlib import Path
 from urllib.parse import urlsplit
+from unittest.mock import patch
 
 from auth_support import FIXTURES
 from test_auth_flow import CREDS, DRY
@@ -40,6 +41,8 @@ class ChromiumFixtureTests(unittest.TestCase):
             chromium_sandbox=True, accept_downloads=False,
         )
         self.addCleanup(context.close)
+        from provadis_m1.credential_step import CREDENTIAL_CAPTURE_SCRIPT
+        context.add_init_script(CREDENTIAL_CAPTURE_SCRIPT)
         return context
 
     def route(self, context, rows, prefix):
@@ -73,7 +76,7 @@ class ChromiumFixtureTests(unittest.TestCase):
             if state in {"kmsi", "email", "password"}:
                 locator = controls(page)["submit"]
             # This is synthetic test JS, not a reconstruction of Microsoft's JS.
-            locator.evaluate("(node, url) => node.addEventListener('click', () => location.href = url)",
+            locator.evaluate("(node, url) => node.addEventListener('click', event => {event.preventDefault(); location.href = url;})",
                              urls[i + 1])
             self.assertTrue(flow.advance(page, now=time.monotonic(), timeout_ms=3000))
             page.wait_for_url(urls[i + 1], timeout=3000)
@@ -105,6 +108,68 @@ class ChromiumFixtureTests(unittest.TestCase):
         self.assertTrue(any(c["name"] == "OTTER_TEST" for c in second.cookies()))
         wet, _ = self.drive(second, WET, "WetLogin")
         self.assertEqual(wet.actions["email"], 0)
+
+    def credential_page(self):
+        """Real DOM/events/POST, with all bytes fulfilled locally."""
+        context = self.launch()
+        page = context.pages[0] if context.pages else context.new_page()
+        action = MICROSOFT + "/common/login"
+
+        def route(r):
+            if r.request.method == "POST" and r.request.url == action:
+                r.fulfill(status=200, content_type="text/html", body="<title>Submitted</title>")
+            elif r.request.url == MICROSOFT + "/otter-fixture/password":
+                r.fulfill(content_type="text/html", body=(FIXTURES /
+                          "DryLogin-7_SignIn-EnterPassword.html").read_text())
+            else:
+                r.abort()
+
+        context.route("**/*", route)
+        flow = AuthFlow(credentials=CREDS)
+        context.on("request", flow.observe_request)
+        page.goto(MICROSOFT + "/otter-fixture/password")
+        return page, flow
+
+    def test_submit_replaced_during_real_handle_click_is_reacquired(self):
+        from playwright.sync_api import ElementHandle
+        page, flow = self.credential_page()
+        click = ElementHandle.click
+        replaced = []
+
+        def replace_then_click(handle, **kwargs):
+            if not replaced:
+                handle.evaluate("node => node.replaceWith(node.cloneNode(true))")
+                replaced.append(True)
+            return click(handle, **kwargs)
+
+        with patch.object(ElementHandle, "click", replace_then_click), \
+                page.expect_request(lambda r: r.method == "POST" and r.url == MICROSOFT + "/common/login"):
+            self.assertTrue(flow.advance(page, now=time.monotonic(), timeout_ms=3000))
+        diag = flow.diagnostics()
+        self.assertEqual(diag["auth_actions"]["password"], 1)
+        self.assertEqual(diag["credential_control_recoveries"], {"password": 1})
+        self.assertEqual(diag["credential_submissions_observed"], {"password": 1})
+
+    def test_real_capture_sees_dispatch_before_site_handler_removes_button(self):
+        from playwright.sync_api import ElementHandle
+        page, flow = self.credential_page()
+        # Cancel native submission, then detach synchronously during dispatch.
+        page.locator("#idSIButton9").evaluate("""node => node.addEventListener('click', event => {
+          event.preventDefault(); node.replaceWith(node.cloneNode(true));
+        })""")
+        click = ElementHandle.click
+
+        def dispatched_then_failed(handle, **kwargs):
+            click(handle, **kwargs)
+            raise self.pw_error("Element is not attached to the DOM")
+
+        with patch.object(ElementHandle, "click", dispatched_then_failed):
+            flow.advance(page, now=time.monotonic(), timeout_ms=3000)
+            self.assertFalse(flow.advance(page, now=time.monotonic(), timeout_ms=3000))
+        diag = flow.diagnostics()
+        self.assertEqual(diag["credential_control_recoveries"], {"password": 0})
+        self.assertEqual(diag["credential_submissions_observed"], {"password": 0})
+        self.assertEqual(diag["credential_submission_outcomes"], {"password": "uncertain"})
 
     def test_passkey_decline_rejects_only_public_key_requests(self):
         context = self.launch()

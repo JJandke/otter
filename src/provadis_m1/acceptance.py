@@ -22,6 +22,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from .auth_flow import UI_ERROR_KINDS, UI_OPERATIONS
+from .credential_step import OUTCOMES
 from .errors import ConfigurationError
 from .state import MARKER, OLD_APPLICATION, _has_symlink, _overlap, private_state
 
@@ -39,7 +40,12 @@ REASONS = {"session_requires_interactive_login", "microsoft_rejected_credentials
            "credentials_file_must_be_owner_only_regular_file", "api_temporarily_unavailable", "unexpected_authentication_origin",
            "authentication_control_origin_changed", "authentication_form_changed",
            "session_reauthentication_failed", "count_mismatch", "malformed_json",
-           "expected_json_content_type", "empty_timetable"}
+           "expected_json_content_type", "empty_timetable",
+           "credential_control_recovery_timeout", "credential_control_recovery_exhausted",
+           "credential_observer_not_installed", "credential_control_verification_failed",
+           "credential_form_action_untrusted", "ambiguous_credential_field",
+           "ambiguous_credential_submit", "credential_form_repeated_email",
+           "credential_form_repeated_password"}
 REASONS |= {prefix + state for prefix in (
     "authentication_timeout_", "authentication_state_timeout_", "authentication_transition_limit_"
 ) for state in STATES}
@@ -105,6 +111,35 @@ def create_run_directory(parent: Path) -> Path:
                                  dir=parent))
 
 
+def submission_evidence(diag: dict, actions: dict) -> dict:
+    """Attempt counters cannot prove a POST; old/missing evidence stays unknown."""
+    counts = diag.get("credential_submissions_observed")
+    outcomes = diag.get("credential_submission_outcomes")
+    present = isinstance(counts, dict) and isinstance(outcomes, dict)
+    if counts is None and outcomes is None:
+        counts, outcomes = {}, {}
+    elif (not present or set(counts) != set(outcomes)
+          or any(k not in {"email", "password"} or type(v) is not int or v not in (0, 1)
+                 for k, v in counts.items())
+          or any(not isinstance(v, str) or v not in OUTCOMES for v in outcomes.values())
+          or any(bool(counts[k]) != (outcomes[k] == "request_observed") for k in counts)):
+        raise ValueError("invalid_credential_submission_evidence")
+    attempted = {k for k in ("email", "password") if actions.get(k, 0)}
+    if set(counts) - attempted:
+        raise ValueError("submission_without_attempt")
+    complete = present and attempted <= set(counts) and all(
+        outcomes[k] == "request_observed" for k in attempted)
+    recoveries = diag.get("credential_control_recoveries", {})
+    if (not isinstance(recoveries, dict)
+            or any(k not in {"email", "password"} or type(v) is not int or not 0 <= v <= 3
+                   for k, v in recoveries.items())):
+        raise ValueError("invalid_credential_recovery_evidence")
+    return {"credential_submissions_observed": counts,
+            "credential_submission_outcomes": outcomes,
+            "credential_control_recoveries": recoveries,
+            "credential_evidence_complete": complete}
+
+
 def project_summary(payload: object, command: str, exit_code: int) -> dict:
     """Copy only validated fixed fields, never arbitrary child text or stderr."""
     if (not isinstance(payload, dict) or type(payload.get("ok")) is not bool
@@ -146,7 +181,7 @@ def project_summary(payload: object, command: str, exit_code: int) -> dict:
                for key, count in actions.items()):
             raise ValueError("invalid_action_evidence")
         projected.append({"event_counts": counts, "direct_api_samples": samples,
-                          "auth_actions": actions})
+                          "auth_actions": actions, **submission_evidence(diag, actions)})
     if payload["ok"]:
         expected_runs, minimum_samples = (2, 2) if command == "verify" else (1, 1)
         if (payload["category"] != "validated_snapshot" or len(projected) != expected_runs
@@ -161,13 +196,19 @@ def project_summary(payload: object, command: str, exit_code: int) -> dict:
             raise ValueError("invalid_failed_action_evidence")
         result["failed_auth_actions"] = failed_actions
         action_sets.append(failed_actions)
-    result["credential_evidence_complete"] = payload["ok"] or isinstance(failed_actions, dict)
+    evidence = list(projected)
+    if not payload["ok"] and isinstance(failed_actions, dict):
+        failed_evidence = submission_evidence(diagnostics, failed_actions)
+        result.update(failed_evidence)
+        evidence.append(failed_evidence)
+    result["credential_evidence_complete"] = bool(evidence) and all(
+        row["credential_evidence_complete"] for row in evidence)
+    result["credential_attempted"] = any(
+        actions.get("email", 0) or actions.get("password", 0) for actions in action_sets)
     result["credential_submission_used"] = any(
-        actions.get("email", 0) or actions.get("password", 0) for actions in action_sets
-    )
+        any(row["credential_submissions_observed"].values()) for row in evidence)
     result["password_submission_observed"] = any(
-        actions.get("password", 0) for actions in action_sets
-    )
+        row["credential_submissions_observed"].get("password", 0) for row in evidence)
     return result
 
 
@@ -241,7 +282,7 @@ class Runner:
         self.config, self.directory, self.child = config, directory, child
         self.monotonic, self.wall, self.sleep = monotonic, wall, sleep
         self.metadata = environment()
-        self.report = {"schema": 1, "mode": config.mode, "status": "running",
+        self.report = {"schema": 2, "mode": config.mode, "status": "running",
                        "started_at": utc_now(), "environment": self.metadata,
                        "steps": [], "timing": [], "schedule_gaps": 0,
                        "plan": {key: getattr(config, key) for key in (
@@ -288,7 +329,7 @@ class Runner:
             raise AcceptanceFailure("source_changed_during_run")
         if not result["ok"]:
             raise AcceptanceFailure("child_failed")
-        if not credentials and result["credential_submission_used"]:
+        if not credentials and result["credential_attempted"]:
             raise AcceptanceFailure("unexpected_credential_submission")
         if require_password and not result["password_submission_observed"]:
             self.report["status"] = "inconclusive"
@@ -342,7 +383,8 @@ class Runner:
                 if self.config.mode == "idle":
                     self.wait(state, self.config.idle_hours * 3600)
                     result = self.step("after_idle", state, "fetch", credentials=True)
-                    self.report["idle_reuse_without_credentials"] = not result["credential_submission_used"]
+                    self.report["idle_reuse_without_credentials"] = (
+                        not result["credential_attempted"] and result["credential_evidence_complete"])
                 else:
                     # Start-to-start samples; skip missed slots rather than issuing catch-up bursts.
                     start, wall_start = self.monotonic(), self.wall()
@@ -380,6 +422,8 @@ class Runner:
             self.report.update(status="failed", reason="runner_operation_failed")
             code = 6
         self.report["finished_at"] = utc_now()
+        self.report["credential_attempting_steps"] = sum(
+            bool(row.get("credential_attempted")) for row in self.report["steps"])
         self.report["credential_submitting_steps"] = sum(
             bool(row.get("credential_submission_used")) for row in self.report["steps"])
         self.write()

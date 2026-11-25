@@ -299,7 +299,14 @@ def browser_run(
                 wait_for_change(current, remaining, PlaywrightTimeout, PlaywrightError)
 
         try:
-            context.on("request", capture.observe)
+            from .credential_step import CREDENTIAL_CAPTURE_SCRIPT
+            context.add_init_script(CREDENTIAL_CAPTURE_SCRIPT)
+
+            def observe_request(request: Any) -> None:
+                capture.observe(request)
+                flow.observe_request(request)
+
+            context.on("request", observe_request)
             context.on("response", capture.observe_response)
             context.on("requestfailed", capture.observe_failed)
             context.on("page", attach)

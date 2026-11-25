@@ -1,5 +1,10 @@
 # M1 acceptance runner and unattended authentication
 
+For the correction on top of `bd82d19`, see
+[detached-submit recovery and retesting](m1-detached-submit.md). That correction
+supersedes the old submission-counter semantics below; historical reports used
+action attempts as submission evidence.
+
 ## Current scope and evidence — 25 November 2026
 
 This increment is based on clean `fix/m1-session-diagnostics`, commit
@@ -30,9 +35,12 @@ reauthentication could be accepted are superseded by this document.
    and password submission per browser run, finite state/global deadlines and no
    automatic HTTP-403 login loop. Wrong credentials and unknown prompts fail
    nonzero rather than repeating password attempts indefinitely.
-3. Summaries report `credential_submission_used`. `verify` reports
-   `restart_reuse_demonstrated: false` if either browser lifetime submitted
-   credentials. Successful retrieval is distinct from pure persistent-session reuse.
+3. Summaries report `credential_attempted` separately from
+   `credential_submission_used` (a matching form POST was observed). `verify`
+   reports `restart_reuse_demonstrated: false` if either browser lifetime attempted
+   credentials, including uncertain outcomes. Successful retrieval is distinct
+   from pure persistent-session reuse. Schema-1 acceptance reports inferred
+   submissions from attempts and cannot establish actual password submission.
 4. `python -m provadis_m1.acceptance` and `scripts/m1-acceptance` provide finite,
    explicit live smoke, active and idle tests on macOS/Linux.
 5. Private reports contain selected counts, state/action evidence, durations,

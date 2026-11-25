@@ -226,7 +226,8 @@ class AuthFlowTests(unittest.TestCase):
         page = self.page("7_SignIn-EnterPassword", MICROSOFT)
         def stage_change(_locator, _value, **_kwargs):
             page.load("DryLogin-8_SignIn-Store.html")
+        flow = AuthFlow(credentials=CREDS)
         with patch.object(Locator, "fill", stage_change):
-            with self.assertRaisesRegex(BootstrapError, "authentication_form_changed"):
-                self.run_step(AuthFlow(credentials=CREDS), page)
+            self.run_step(flow, page)
         self.assertEqual(page.clicks, [])
+        self.assertEqual(flow.diagnostics()["credential_submission_outcomes"], {"password": "uncertain"})

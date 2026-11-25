@@ -24,7 +24,9 @@ def payload(command="fetch", *, password=False, ok=True):
             result["browser_runs"].append({
                 "direct_api_samples": len(counts), "event_counts": counts,
                 "diagnostics": {"browser_mode": "headless", "auth_actions":
-                                {"password": 1} if password else {"study": 1}}
+                                {"password": 1} if password else {"study": 1},
+                                "credential_submissions_observed": {"password": 1} if password else {},
+                                "credential_submission_outcomes": {"password": "request_observed"} if password else {}}
             })
     return result
 
@@ -220,6 +222,21 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(list(first.directory.glob(".report-*")))
 
 
+    def test_missing_post_evidence_makes_fresh_smoke_inconclusive(self):
+        def child(argv, timeout):
+            data = payload(argv[3], password=True)
+            diag = data["browser_runs"][0]["diagnostics"]
+            diag["credential_submissions_observed"]["password"] = 0
+            diag["credential_submission_outcomes"]["password"] = "awaiting_request"
+            return a.project_summary(data, argv[3], 0)
+        run = self.runner(child=child)
+        self.assertEqual(run.execute(), 5)
+        self.assertEqual(run.report["schema"], 2)
+        self.assertEqual(run.report["status"], "inconclusive")
+        self.assertEqual(run.report["credential_attempting_steps"], 1)
+        self.assertEqual(run.report["credential_submitting_steps"], 0)
+
+
 class ProtocolAndProcessTests(unittest.TestCase):
     def test_valid_api_evidence_and_no_raw_text_copying(self):
         data = payload("verify", password=True)
@@ -251,7 +268,10 @@ class ProtocolAndProcessTests(unittest.TestCase):
         result = a.project_summary(data, "fetch", 2)
         self.assertEqual(result["reason"], "unclassified_child_failure")
         self.assertEqual(result["auth_state"], "password")
-        self.assertTrue(result["credential_submission_used"])
+        self.assertTrue(result["credential_attempted"])
+        self.assertFalse(result["credential_submission_used"])
+        self.assertFalse(result["password_submission_observed"])
+        self.assertFalse(result["credential_evidence_complete"])
         self.assertEqual(result["failed_auth_actions"], {"password": 1})
         self.assertNotIn("secret_which", json.dumps(result))
         self.assertNotIn("SECRET", json.dumps(result))
@@ -263,6 +283,37 @@ class ProtocolAndProcessTests(unittest.TestCase):
         result = a.run_child([sys.executable, "-c", script, "fetch"], 5)
         self.assertTrue(result["ok"])
         self.assertNotIn("SECRET", json.dumps(result))
+
+    def test_dispatched_but_unobserved_password_is_not_a_submission(self):
+        data = payload(ok=False)
+        data["diagnostics"] = {
+            "auth_actions": {"password": 1},
+            "credential_submissions_observed": {"password": 0},
+            "credential_submission_outcomes": {"password": "uncertain"}}
+        result = a.project_summary(data, "fetch", 2)
+        self.assertTrue(result["credential_attempted"])
+        self.assertFalse(result["password_submission_observed"])
+        self.assertFalse(result["credential_submission_used"])
+        self.assertFalse(result["credential_evidence_complete"])
+        data["diagnostics"]["credential_submissions_observed"]["password"] = 1
+        data["diagnostics"]["credential_submission_outcomes"]["password"] = "request_observed"
+        result = a.project_summary(data, "fetch", 2)
+        self.assertTrue(result["password_submission_observed"])
+        self.assertFalse(result["ok"])  # A POST alone does not prove authentication.
+
+    def test_invalid_or_arbitrary_submission_evidence_is_rejected(self):
+        for counts, outcomes in (({"password": True}, {"password": "request_observed"}),
+                                 ({"password": 2}, {"password": "request_observed"}),
+                                 ({"password": 0}, {"password": "request_observed"}),
+                                 ({"password": 1}, {"password": "uncertain"}),
+                                 ({"password": 0}, {"password": "SECRET"}),
+                                 ({"SECRET": 1}, {"SECRET": "request_observed"})):
+            data = payload(password=True)
+            diag = data["browser_runs"][0]["diagnostics"]
+            diag.update(credential_submissions_observed=counts,
+                        credential_submission_outcomes=outcomes)
+            with self.assertRaises(ValueError):
+                a.project_summary(data, "fetch", 0)
 
     def test_real_child_timeout_is_bounded_and_kills_its_process_group(self):
         result = a.run_child([sys.executable, "-c", "import time; time.sleep(60)", "fetch"], .05)

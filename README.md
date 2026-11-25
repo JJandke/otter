@@ -36,8 +36,10 @@ Passwords are never passed as command-line values or saved in reports.
 
 Omit `--credentials-file` for strict session-reuse tests. `verify` always uses two
 headless browser lifetimes with at least two validated direct requests each. Its
-`restart_reuse_demonstrated` is false if credentials were submitted; successful
-automatic authentication is reported separately as `credential_submission_used`.
+`restart_reuse_demonstrated` is false if credentials were attempted.
+Credential attempts are reported separately as `credential_attempted`; matching
+form POST observations set `credential_submission_used`. These are distinct from
+API validation. See [detached-submit recovery and retesting](docs/m1-detached-submit.md).
 
 The opt-in `--decline-passkey` behavior rejects WebAuthn requests on specifically
 allowlisted Microsoft pages, supplying no authenticator or MFA response. It

@@ -26,6 +26,7 @@ class Document(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         node = Node(tag, attrs)
+        node.form = next((n for n in reversed(self.stack) if n.tag == "form"), None)
         self.nodes.append(node)
         if tag not in {"input", "meta", "img", "br", "link"}:
             self.stack.append(node)
@@ -60,9 +61,36 @@ class Locator:
         return self.nodes[0].text
 
     def element_handle(self, **kwargs):
-        return self
+        return self if self.nodes else None
 
     def evaluate(self, expression, expected):
+        from provadis_m1.credential_step import PREPARE, VERIFY_SUBMIT
+        if expression in (PREPARE, VERIFY_SUBMIT):
+            if origin(self.page.url) != expected["host"]:
+                return {"status": "origin_changed"}
+            node = self.nodes[0]
+            if node not in self.page.document.nodes:
+                return {"status": "detached"}
+            record = self.page.records.get(expected["token"])
+            if record and record["dispatched"]:
+                return {"status": "dispatched"}
+            fields = self.page.locator(expected["marker"]).nodes
+            if expression == PREPARE:
+                if not fields or fields != [node] or node.form is None:
+                    return {"status": "form_changed"}
+                if record is None and not expected["initial"]:
+                    return {"status": "evidence_lost"}
+                action = node.form.attrs["action"]
+                if record and record["action"] != action:
+                    return {"status": "form_changed"}
+                self.page.records[expected["token"]] = {
+                    "dispatched": False, "action": action, "form": node.form}
+                return {"status": "ready", "action": action}
+            if record is None:
+                return {"status": "evidence_lost"}
+            if not fields or node.form is not fields[0].form or node.form is not record["form"]:
+                return {"status": "form_changed"}
+            return {"status": "ready"}
         if origin(self.page.url) != expected["host"]:
             return "origin_changed"
         if expected["marker"] and self.page.locator(expected["marker"]).count() == 0:
@@ -73,7 +101,15 @@ class Locator:
         self.page.fills[self.nodes[0].attrs["name"]] = value
 
     def click(self, **kwargs):
-        self.page.clicks.append(self.nodes[0])
+        node = self.nodes[0]
+        if node not in self.page.document.nodes:
+            raise RuntimeError("Element is not attached to the DOM")
+        for record in self.page.records.values():
+            if node.attrs.get("id") == "idSIButton9" and node.form is record["form"]:
+                record["dispatched"] = True
+                if hasattr(self.page, "on_credential_request"):
+                    self.page.on_credential_request(record["action"])
+        self.page.clicks.append(node)
         if hasattr(self.page, "on_click"):
             self.page.on_click()
 
@@ -87,10 +123,18 @@ class Locator:
 class Page:
     def __init__(self, fixture, url):
         self.url, self.fills, self.clicks, self.checked = url, {}, [], False
+        self.main_frame = object()
         self.load(fixture)
 
     def load(self, fixture):
+        self.records = {}
         self.document = Document((FIXTURES / fixture).read_text() if fixture else "")
+
+    def evaluate(self, expression, token):
+        from provadis_m1.credential_step import READ_EVIDENCE
+        assert expression == READ_EVIDENCE
+        record = self.records.get(token)
+        return {"dispatched": record["dispatched"]} if record else None
 
     def locator(self, css):
         nodes = self.document.nodes

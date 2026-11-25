@@ -170,7 +170,8 @@ class CLITests(unittest.TestCase):
                 'provadis_m1.__main__.load_credentials', return_value=credentials
             ):
                 code, result, run = self.invoke(command, return_value={
-                    'event_counts': [2, 2], 'diagnostics': {'auth_actions': {'password': 1}}
+                    'event_counts': [2, 2], 'diagnostics': {'auth_actions': {'password': 1},
+                    'credential_submissions_observed': {'password': 1}}
                 }, extra=('--credentials-file', '/private.env', '--decline-passkey'))
             self.assertEqual(code, 0)
             self.assertTrue(result['credential_submission_used'])
@@ -192,3 +193,12 @@ class CLITests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertFalse(result['credential_submission_used'])
         self.assertTrue(result['restart_reuse_demonstrated'])
+
+    def test_unobserved_attempt_is_not_pure_session_reuse_or_submission(self):
+        code, result, _ = self.invoke('verify', return_value={
+            'event_counts': [2, 2], 'diagnostics': {'auth_actions': {'password': 1},
+            'credential_submissions_observed': {'password': 0}}})
+        self.assertEqual(code, 0)
+        self.assertTrue(result['credential_attempted'])
+        self.assertFalse(result['credential_submission_used'])
+        self.assertFalse(result['restart_reuse_demonstrated'])

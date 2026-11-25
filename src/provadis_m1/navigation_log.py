@@ -14,6 +14,7 @@ from .auth_flow import UI_ERROR_KINDS, UI_OPERATIONS
 EVENTS = {
     'auth_state', 'auth_action', 'auth_action_completed', 'session_reauthentication',
     'auth_action_suppressed', 'auth_ui_error',
+    'credential_request_observed', 'credential_control_reacquired', 'credential_submission_uncertain',
     'log_started', 'log_finished', 'browser_started', 'browser_finished',
     'click_attempt', 'click_completed', 'click_failed', 'selector_ambiguous',
     'goto_attempt', 'goto_completed', 'goto_failed', 'frame_navigated',

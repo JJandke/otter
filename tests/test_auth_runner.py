@@ -62,7 +62,13 @@ class TestPage(Page):
     def on_click(self):
         self.pending = True
 
+    def on_credential_request(self, action):
+        self.context.events["request"](Mock(url=action, method="POST", frame=self.main_frame))
+
     def evaluate(self, *args):
+        from provadis_m1.credential_step import READ_EVIDENCE
+        if args[0] == READ_EVIDENCE:
+            return super().evaluate(*args)
         return [1, self.index, "/"]
 
     def wait_for_function(self, *args, **kwargs):
@@ -114,6 +120,34 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result["event_counts"], [2])
         self.assertEqual(result["diagnostics"]["auth_actions"]["password"], 1)
         self.context.close.assert_called_once()
+
+    def test_dry_driver_with_replaced_submit_produces_valid_acceptance_evidence(self):
+        from auth_support import Locator, Node
+        from provadis_m1.acceptance import project_summary
+        original = Locator.click
+        replaced = []
+
+        def click(locator, **kwargs):
+            node = locator.nodes[0]
+            password = any(n.attrs.get("name") == "passwd" and n.attrs.get("id") == "i0118"
+                           and "moveOffScreen" not in n.attrs.get("class", "")
+                           for n in locator.page.document.nodes)
+            if node.attrs.get("id") == "idSIButton9" and password and not replaced:
+                replacement = Node(node.tag, node.attrs.items())
+                replacement.form = node.form
+                locator.page.document.nodes[locator.page.document.nodes.index(node)] = replacement
+                replaced.append(True)
+            return original(locator, **kwargs)
+
+        with patch.object(Locator, "click", click):
+            run = self.invoke([plan(DRY, "DryLogin")], credentials=CREDS)
+        summary = project_summary({"ok": True, "command": "login", "category": "validated_snapshot",
+                                   "browser_runs": [run]}, "login", 0)
+        self.assertEqual(run["event_counts"], [2])
+        self.assertEqual(run["diagnostics"]["credential_control_recoveries"], {"email": 0, "password": 1})
+        self.assertTrue(summary["password_submission_observed"])
+        self.assertTrue(summary["credential_evidence_complete"])
+        self.assertEqual(summary["browser_runs"][0]["auth_actions"]["password"], 1)
 
     def test_wet_login_skips_microsoft_and_validates_api(self):
         result = self.invoke([plan(WET, "WetLogin")])

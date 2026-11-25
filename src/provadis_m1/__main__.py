@@ -121,13 +121,17 @@ def main(argv: list[str] | None = None) -> int:
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()
             result.update({"ok": True, "category": "validated_snapshot", "browser_runs": runs})
-            credential_submission_used = any(
+            credential_attempted = any(
                 any(run.get("diagnostics", {}).get("auth_actions", {}).get(step, 0) > 0
                     for step in ("email", "password")) for run in runs
             )
-            result["credential_submission_used"] = credential_submission_used
+            result["credential_attempted"] = credential_attempted
+            result["credential_submission_used"] = any(
+                any(run.get("diagnostics", {}).get("credential_submissions_observed", {}).values())
+                for run in runs
+            )
             if args.command == "verify":
-                result["restart_reuse_demonstrated"] = not credential_submission_used
+                result["restart_reuse_demonstrated"] = not credential_attempted
                 result["unattended_retrieval_demonstrated"] = True
     except M1Error as error:
         result.update({"category": error.category, "reason": error.reason})

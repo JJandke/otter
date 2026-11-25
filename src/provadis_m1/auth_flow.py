@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit
 
+from .credential_step import CredentialStep
 from .credentials import LoginCredentials
 from .errors import AuthenticationError, BootstrapError
 
@@ -39,7 +40,7 @@ UI_ERROR_KINDS = {"timeout", "element_detached", "context_destroyed", "browser_c
 
 def ui_error_kind(error: Exception, timeout_type: type) -> str:
     """Reduce an exception to a fixed category; never retain/emit its raw text."""
-    if isinstance(error, timeout_type):
+    if isinstance(error, timeout_type) or type(error).__name__ == "TimeoutError":
         return "timeout"
     message = str(error).lower()
     if any(marker in message for marker in (
@@ -105,6 +106,7 @@ class AuthFlow:
     _suppressed_logged: set[str] = field(default_factory=set, repr=False)
     operation: str = "detect"
     last_ui_error_kind: str | None = None
+    _credential_steps: dict[str, CredentialStep] = field(default_factory=dict, repr=False)
 
     def detect(self, page: Any) -> tuple[str, Any | None]:
         url = urlsplit(page.url)
@@ -186,6 +188,9 @@ class AuthFlow:
     def advance(self, page: Any, *, now: float, timeout_ms: int) -> bool:
         self.operation = "detect"
         state, item = self.detect(page)
+        for phase, step in self._credential_steps.items():
+            if state not in {phase, "unknown", "redirect"}:
+                step.progressed, step.active = True, False
         if state != self.state:
             self.state, self._entered, self._acted = state, now, False
             if self.trace:
@@ -213,6 +218,9 @@ class AuthFlow:
                 return False
         if state in {"email", "password"}:
             if state in self._credential_attempts:
+                previous = self._credential_steps.get(state)
+                if previous is not None and not previous.progressed:
+                    return False  # Await an uncertain/in-flight outcome, never resubmit.
                 raise AuthenticationError("credential_form_repeated_" + state)
             self._credential_attempts.add(state)
         if self.actions[state] >= 2:
@@ -233,8 +241,13 @@ class AuthFlow:
 
         if state in {"email", "password"}:
             value = self.credentials.username if state == "email" else self.credentials.password
-            self._act(item, host, remaining(), value=value)
-            self._act(submit, host, remaining(), marker=EMAIL if state == "email" else PASSWORD)
+            step = CredentialStep(
+                page=page, phase=state, marker=EMAIL if state == "email" else PASSWORD, host=host,
+                operation=lambda value: setattr(self, "operation", value),
+                on_error=lambda error: self.record_ui_error(error, TimeoutError), trace=self.trace,
+            )
+            self._credential_steps[state] = step
+            step.run(value, remaining())
         elif state == "kmsi":
             checkbox = unique(controls(page)["dont_show_again"], "dont_show_again")
             if checkbox is not None:
@@ -252,6 +265,12 @@ class AuthFlow:
         self.state, self._entered, self._acted = "starting", 0, False
         self._entry_attempts.clear()
         self._suppressed_logged.clear()
+        for step in self._credential_steps.values():
+            step.progressed, step.active = True, False
+
+    def observe_request(self, request: Any) -> None:
+        for step in self._credential_steps.values():
+            step.observe_request(request)
 
     def record_ui_error(self, error: Exception, timeout_type: type) -> str:
         kind = ui_error_kind(error, timeout_type)
@@ -263,7 +282,16 @@ class AuthFlow:
 
     def diagnostics(self) -> dict:
         result = {"auth_state": self.state, "auth_actions": dict(self.actions),
-                  "auth_operation": self.operation}
+                  "auth_operation": self.operation,
+                  "credential_submissions_observed": {
+                      phase: int(step.observed) for phase, step in self._credential_steps.items()
+                  },
+                  "credential_submission_outcomes": {
+                      phase: step.outcome for phase, step in self._credential_steps.items()
+                  },
+                  "credential_control_recoveries": {
+                      phase: step.recoveries for phase, step in self._credential_steps.items()
+                  }}
         if self.last_ui_error_kind is not None:
             result["last_ui_error_kind"] = self.last_ui_error_kind
         return result
