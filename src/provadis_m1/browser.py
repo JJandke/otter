@@ -3,6 +3,7 @@
 No OAuth client, token cache reader, refresh-token replay, tracing, or storage export.
 """
 
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -50,6 +51,8 @@ class PortalCapture:
     direct_status: int | None = None
     api_transport_failed: bool = False
     page_errors: int = 0
+    direct_attempts: int = 0
+    direct_transport_failures: int = 0
 
     def observe_page_error(self, _error: Any) -> None:
         # Count only: JavaScript error messages/stacks may contain sensitive data.
@@ -73,6 +76,8 @@ class PortalCapture:
             "portal_api_requests_observed": self.api_requests,
             "last_portal_api_status": self.last_api_status,
             "last_direct_api_status": self.direct_status,
+            "direct_api_attempts": self.direct_attempts,
+            "direct_api_transport_failures": self.direct_transport_failures,
             "portal_api_transport_failed": self.api_transport_failed,
             "identity_requests_observed": self.identity_requests,
             "token_endpoint_requests_observed": self.token_endpoint_requests,
@@ -120,19 +125,47 @@ class PortalCapture:
 
 
 def direct_fetch(context: Any, bearer: str, timeout_ms: int, pw_error: type,
-                 capture: PortalCapture | None = None) -> ValidatedSnapshot:
-    """No redirects, retries, parameters, request body, or UI navigation."""
-    try:
-        response = context.request.get(
-            API_URL,
-            headers={"Authorization": bearer, "Accept": "application/json"},
-            timeout=timeout_ms,
-            max_redirects=0,
-            max_retries=0,
-            fail_on_status_code=False,
-        )
-    except pw_error:
-        raise NetworkError() from None
+                 capture: PortalCapture | None = None, trace: Any = None) -> ValidatedSnapshot:
+    """Retry only transient transport failures of the fixed read-only GET.
+
+    Three attempts maximum, each capped at timeout_ms, with a shared deadline
+    of three request budgets. HTTP/auth/schema/body failures are not retried.
+    """
+    deadline = time.monotonic() + 3 * timeout_ms / 1000
+    if capture is not None:
+        capture.direct_status = None
+    for attempt in range(3):
+        remaining = math.ceil((deadline - time.monotonic()) * 1000)
+        if remaining <= 0:
+            raise NetworkError("direct_api_timeout")
+        if capture is not None:
+            capture.direct_attempts += 1
+        try:
+            response = context.request.get(
+                API_URL,
+                headers={"Authorization": bearer, "Accept": "application/json"},
+                timeout=min(timeout_ms, remaining),
+                max_redirects=0,
+                max_retries=0,
+                fail_on_status_code=False,
+            )
+            break
+        except pw_error as error:
+            if capture is not None:
+                capture.direct_transport_failures += 1
+            # Only fixed categories leave this function. Raw Playwright messages
+            # can contain Authorization headers and are never retained/logged.
+            message = str(error).lower()
+            timed_out = type(error).__name__ == "TimeoutError" or "timeout" in message or "timed out" in message
+            transient = timed_out or any(marker in message for marker in (
+                "econnreset", "etimedout", "econnaborted", "socket hang up", "connection reset",
+                "err_connection_reset", "socket disconnected", "eai_again"))
+            reason = "direct_api_timeout" if timed_out else "direct_api_transport_failed"
+            if not transient or attempt == 2 or time.monotonic() >= deadline:
+                raise NetworkError(reason) from None
+            if trace:
+                trace("api_transport_retry", action="direct_api",
+                      error_kind="timeout" if timed_out else "other")
     try:
         if capture is not None:
             capture.direct_status = response.status
@@ -335,7 +368,7 @@ def browser_run(
                     trace("api_attempt", action="direct_api", url=API_URL)
                 try:
                     snapshot = direct_fetch(context, capture.require_bearer(),
-                                            request_seconds * 1000, PlaywrightError, capture)
+                                            request_seconds * 1000, PlaywrightError, capture, trace)
                 except AuthenticationError as error:
                     if error.reason != "api_access_denied" or recovering:
                         raise
@@ -346,7 +379,7 @@ def browser_run(
                     recover_expired()
                     bootstrap()
                     snapshot = direct_fetch(context, capture.require_bearer(),
-                                            request_seconds * 1000, PlaywrightError, capture)
+                                            request_seconds * 1000, PlaywrightError, capture, trace)
                 counts.append(snapshot.event_count)
                 if trace:
                     trace("api_validated", action="direct_api", status=200)

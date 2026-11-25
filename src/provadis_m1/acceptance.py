@@ -33,7 +33,9 @@ STATES = {"starting", "redirect", "student", "portal_login", "b2c_microsoft", "b
 ACTIONS = STATES - {"starting", "redirect", "native_passkey", "timetable", "unknown"}
 CATEGORIES = {"authentication", "bootstrap", "configuration", "network", "service",
               "invalid_response", "suspicious_response", "interrupted", "validated_snapshot"}
-REASONS = {"session_requires_interactive_login", "microsoft_rejected_credentials",
+REASONS = {"direct_api_timeout", "direct_api_transport_failed", "response_read_failed",
+           "portal_timetable_request_failed", "portal_navigation_failed",
+           "session_requires_interactive_login", "microsoft_rejected_credentials",
            "api_access_denied", "profile_already_in_use", "browser_launch_failed",
            "authentication_ui_operation_failed", "authentication_wait_failed",
            "credentials_file_unreadable_or_invalid", "invalid_credentials_file",
@@ -111,6 +113,15 @@ def create_run_directory(parent: Path) -> Path:
                                  dir=parent))
 
 
+def transport_evidence(diag: dict) -> dict:
+    result = {key: diag.get(key, 0) for key in (
+        "direct_api_attempts", "direct_api_transport_failures")}
+    if (any(type(v) is not int or not 0 <= v <= 5400 for v in result.values())
+            or result["direct_api_transport_failures"] > result["direct_api_attempts"]):
+        raise ValueError("invalid_transport_evidence")
+    return result
+
+
 def submission_evidence(diag: dict, actions: dict) -> dict:
     """Attempt counters cannot prove a POST; old/missing evidence stays unknown."""
     counts = diag.get("credential_submissions_observed")
@@ -181,7 +192,8 @@ def project_summary(payload: object, command: str, exit_code: int) -> dict:
                for key, count in actions.items()):
             raise ValueError("invalid_action_evidence")
         projected.append({"event_counts": counts, "direct_api_samples": samples,
-                          "auth_actions": actions, **submission_evidence(diag, actions)})
+                          "auth_actions": actions, **submission_evidence(diag, actions),
+                          **transport_evidence(diag)})
     if payload["ok"]:
         expected_runs, minimum_samples = (2, 2) if command == "verify" else (1, 1)
         if (payload["category"] != "validated_snapshot" or len(projected) != expected_runs
@@ -200,6 +212,7 @@ def project_summary(payload: object, command: str, exit_code: int) -> dict:
     if not payload["ok"] and isinstance(failed_actions, dict):
         failed_evidence = submission_evidence(diagnostics, failed_actions)
         result.update(failed_evidence)
+        result.update(transport_evidence(diagnostics))
         evidence.append(failed_evidence)
     result["credential_evidence_complete"] = bool(evidence) and all(
         row["credential_evidence_complete"] for row in evidence)
@@ -313,7 +326,7 @@ class Runner:
             if self.config.decline_passkey:
                 argv.append("--decline-passkey")
         lifetimes = 2 if command == "verify" else 1
-        timeout = lifetimes * (2 * self.config.bootstrap_seconds + 30 * lifetimes + 30) + 10
+        timeout = lifetimes * (2 * self.config.bootstrap_seconds + 90 * ((2 if command == "verify" else 1) + 1) + 30) + 10
         started = self.monotonic()
         row = {"label": label, "state": str(state.relative_to(self.directory)),
                "started_at": utc_now(), "credentials_authorized": credentials}

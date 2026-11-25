@@ -21,7 +21,7 @@ EVENTS = {
     'navigation_request', 'navigation_response', 'navigation_failed', 'page_location',
     'selector_missing', 'dashboard_retry', 'credential_step_completed',
     'microsoft_form', 'passkey_decline_enabled', 'failure_pause',
-    'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
+    'api_transport_retry', 'api_attempt', 'api_validated', 'run_failed', 'limit_reached',
 }
 ACTIONS = {
     'student_entry_clicked', 'post_sso_student_entry_clicked', 'sign_in_clicked', 'student_sso_clicked',
