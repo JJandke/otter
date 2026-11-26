@@ -32,6 +32,10 @@ FAILURE_REASONS = frozenset({
     "direct_api_timeout", "direct_api_transport_failed", "response_read_failed",
     "portal_did_not_issue_timetable_bearer", "provider_failed", "provider_contract_failed",
     "operator_interrupted", "abandoned_observation", "observation_write_failed", "fetch_failed",
+    "input_file_unavailable", "candidate_handoff_invalid",
+    "playwright_not_installed", "browser_launch_failed", "profile_already_in_use", "unsafe_state_parent",
+    "credentials_file_unreadable_or_invalid", "credentials_file_must_be_owner_only_regular_file",
+    "credentials_file_must_be_outside_project_and_old_application",
 })
 REVIEW_REASONS = {"confirmed_empty": "empty_timetable", "confirmed_duplicates": "duplicate_events",
                   "confirmed_change": "unexpected_future_decrease"}
@@ -314,6 +318,47 @@ class IngestionService:
             try:
                 return self.ingest_captured(context, capture)
             except (StorageError, IngestionError):
+                raise PendingObservationError(context, capture) from None
+
+    def import_candidate(self, observation_uuid: str,
+                         reader: Callable[[], SnapshotCandidate]) -> ObservationResult:
+        """Finite file input under a stable ID, always with import origin.
+
+        Replay verifies new contents against the original receipt. Failed/invalid
+        imports need a new ID because no original payload was retained.
+        """
+        _uuid(observation_uuid)
+        with self.store.exclusive():
+            row = self.store.attempt(observation_uuid)
+            if row is not None:
+                if row["origin"] != "import":
+                    raise IngestionError("observation_id_conflict")
+                if row["capture_digest"] is None:
+                    if row["status"] == "started":
+                        self.recover_interrupted()
+                    raise IngestionError("recorded_observation_has_no_receipt")
+                context = ObservationContext(observation_uuid, "import",
+                                             EPOCH + timedelta(microseconds=row["started_at_utc_us"]))
+                received = EPOCH + timedelta(microseconds=row["capture_received_at_utc_us"])
+                candidate = reader()
+                _validate_candidate(candidate)
+            else:
+                self.recover_interrupted()
+                context = ObservationContext(observation_uuid, "import", self._now())
+                self._start(context)
+                try:
+                    candidate = reader()
+                    _validate_candidate(candidate)
+                except BaseException as error:
+                    result = self._provider_failure(context, error)
+                    if not isinstance(error, Exception):
+                        raise KeyboardInterrupt() from None
+                    return result
+                received = self._now()
+            capture = CapturedSnapshot(candidate, received)
+            try:
+                return self.ingest_captured(context, capture)
+            except StorageError:
                 raise PendingObservationError(context, capture) from None
 
     def approve(self, observation_uuid: str, *, expected_baseline_attempt_no: int | None,

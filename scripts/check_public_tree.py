@@ -8,7 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
-BAD_PARTS = {".otter-data", ".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
+BAD_PARTS = {".otter-runtime", ".otter-data", ".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
 BAD_SUFFIXES = {".har", ".pem", ".key", ".passwd", ".sqlite", ".db", ".ics", ".jsonl"}
 PATTERNS = [
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),

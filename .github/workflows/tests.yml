@@ -26,7 +26,7 @@ jobs:
       - name: Compile Python and check shell syntax
         run: |
           .venv/bin/python -m compileall -q src scripts tests
-          sh -n scripts/setup scripts/m1 scripts/m1-acceptance .githooks/pre-commit
+          sh -n scripts/setup scripts/m1 scripts/m1-acceptance scripts/otter .githooks/pre-commit
       - name: Install Chromium and Linux browser dependencies
         run: .venv/bin/python -m playwright install --with-deps chromium
       - name: Smoke-test sandboxed Chromium without authentication

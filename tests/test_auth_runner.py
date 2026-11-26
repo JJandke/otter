@@ -88,7 +88,7 @@ class RunnerTests(unittest.TestCase):
     def invoke(self, plans, *, credentials=None, statuses=(200,), body=VALID,
                emit_api=True, bootstrap_seconds=2, keep=False,
                failure_diagram=None, portal_statuses=(200,), samples=1,
-               snapshot_validator=None, on_snapshot=None):
+               snapshot_validator=None, on_snapshot=None, operation=None):
         context = Mock()
         context.events = {}
         context.on.side_effect = lambda name, callback: context.events.update({name: callback})
@@ -110,6 +110,8 @@ class RunnerTests(unittest.TestCase):
             with patch.dict("sys.modules", {"playwright.sync_api": module}), \
                     patch("provadis_m1.browser.capture_failure", return_value={"report": "safe.json"},
                           side_effect=failure_diagram):
+                if operation is not None:
+                    return operation()
                 return browser_run(Path(temp) / "profile", interactive=False,
                                    headed=keep, credentials=credentials,
                                    bootstrap_seconds=bootstrap_seconds,
