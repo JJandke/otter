@@ -23,6 +23,8 @@
 *.jsonl
 *.sqlite*
 *.db
+*.db-*
+.otter-data/
 *.ics
 *.png
 *.jpg

@@ -8,7 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
-BAD_PARTS = {".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
+BAD_PARTS = {".otter-data", ".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
 BAD_SUFFIXES = {".har", ".pem", ".key", ".passwd", ".sqlite", ".db", ".ics", ".jsonl"}
 PATTERNS = [
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
@@ -24,6 +24,7 @@ def main() -> int:
     for raw_name in filter(None, names):
         path = Path(raw_name.decode("utf-8"))
         if (BAD_PARTS.intersection(path.parts) or path.suffix in BAD_SUFFIXES
+                or ".sqlite" in path.name.lower() or re.search(r"\.db(?:$|[-.])", path.name, re.I)
                 or path.name.startswith(".env") or path.suffix == ".env" or path.is_symlink()):
             bad.append(str(path))
             continue
