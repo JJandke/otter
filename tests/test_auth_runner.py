@@ -87,7 +87,8 @@ def plan(rows, prefix):
 class RunnerTests(unittest.TestCase):
     def invoke(self, plans, *, credentials=None, statuses=(200,), body=VALID,
                emit_api=True, bootstrap_seconds=2, keep=False,
-               failure_diagram=None, portal_statuses=(200,)):
+               failure_diagram=None, portal_statuses=(200,), samples=1,
+               snapshot_validator=None, on_snapshot=None):
         context = Mock()
         context.events = {}
         context.on.side_effect = lambda name, callback: context.events.update({name: callback})
@@ -104,7 +105,7 @@ class RunnerTests(unittest.TestCase):
         module = types.ModuleType("playwright.sync_api")
         module.Error, module.TimeoutError = BrowserError, BrowserTimeout
         module.sync_playwright = Mock(return_value=manager)
-        self.context, self.page = context, page
+        self.context, self.page, self.responses = context, page, responses
         with tempfile.TemporaryDirectory() as temp:
             with patch.dict("sys.modules", {"playwright.sync_api": module}), \
                     patch("provadis_m1.browser.capture_failure", return_value={"report": "safe.json"},
@@ -112,8 +113,9 @@ class RunnerTests(unittest.TestCase):
                 return browser_run(Path(temp) / "profile", interactive=False,
                                    headed=keep, credentials=credentials,
                                    bootstrap_seconds=bootstrap_seconds,
-                                   request_seconds=1, samples=1, sample_interval=0,
-                                   keep_open_on_error=keep)
+                                   request_seconds=1, samples=samples, sample_interval=0,
+                                   keep_open_on_error=keep,
+                                   snapshot_validator=snapshot_validator, on_snapshot=on_snapshot)
 
     def test_dry_login_reaches_and_validates_api(self):
         result = self.invoke([plan(DRY, "DryLogin")], credentials=CREDS)

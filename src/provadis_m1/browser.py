@@ -6,6 +6,7 @@ No OAuth client, token cache reader, refresh-token replay, tracing, or storage e
 import math
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,9 @@ from .errors import (
 )
 from .failure_diagnostics import capture_failure
 from .navigation_log import attach_navigation_log
-from .validation import MAX_RESPONSE_BYTES, ValidatedSnapshot, validate_http, validate_response
+from .validation import (
+    MAX_RESPONSE_BYTES, ResponseValidator, SnapshotResult, validate_http, validate_response,
+)
 
 DEFAULT_PORTAL_PATH = "/student/schedule"
 PORTAL_URL = "https://hvsweb.provadis-hochschule.de/"
@@ -125,7 +128,8 @@ class PortalCapture:
 
 
 def direct_fetch(context: Any, bearer: str, timeout_ms: int, pw_error: type,
-                 capture: PortalCapture | None = None, trace: Any = None) -> ValidatedSnapshot:
+                 capture: PortalCapture | None = None, trace: Any = None, *,
+                 validator: ResponseValidator | None = None) -> SnapshotResult:
     """Retry only transient transport failures of the fixed read-only GET.
 
     Three attempts maximum, each capped at timeout_ms, with a shared deadline
@@ -180,7 +184,8 @@ def direct_fetch(context: Any, bearer: str, timeout_ms: int, pw_error: type,
                     raise InvalidResponse("invalid_response_size")
             except ValueError:
                 raise InvalidResponse("invalid_content_length") from None
-        return validate_response(response.status, content_type, response.body())
+        parse = validate_response if validator is None else validator
+        return parse(response.status, content_type, response.body())
     except pw_error:
         raise NetworkError("response_read_failed") from None
     finally:
@@ -203,7 +208,12 @@ def browser_run(
     failure_pause_seconds: int = 0,
     keep_open_on_error: bool = False,
     state_seconds: int = 60,
+    snapshot_validator: ResponseValidator | None = None,
+    on_snapshot: Callable[[SnapshotResult], None] | None = None,
 ) -> dict[str, Any]:
+    # Internal opt-in data handoff only. The returned diagnostic dictionary and
+    # existing CLI remain count-only. Consumers should capture in memory here,
+    # then perform storage work after this function closes the browser.
     # Import lazily so unit tests need no browser installation.
     try:
         from playwright.sync_api import Error as PlaywrightError
@@ -368,7 +378,8 @@ def browser_run(
                     trace("api_attempt", action="direct_api", url=API_URL)
                 try:
                     snapshot = direct_fetch(context, capture.require_bearer(),
-                                            request_seconds * 1000, PlaywrightError, capture, trace)
+                                            request_seconds * 1000, PlaywrightError, capture, trace,
+                                            validator=snapshot_validator)
                 except AuthenticationError as error:
                     if error.reason != "api_access_denied" or recovering:
                         raise
@@ -379,7 +390,12 @@ def browser_run(
                     recover_expired()
                     bootstrap()
                     snapshot = direct_fetch(context, capture.require_bearer(),
-                                            request_seconds * 1000, PlaywrightError, capture, trace)
+                                            request_seconds * 1000, PlaywrightError, capture, trace,
+                                            validator=snapshot_validator)
+                # Outside the authentication recovery block: consumer errors
+                # must never replay GETs or credential submissions.
+                if on_snapshot is not None:
+                    on_snapshot(snapshot)
                 counts.append(snapshot.event_count)
                 if trace:
                     trace("api_validated", action="direct_api", status=200)
