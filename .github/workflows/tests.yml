@@ -1,4 +1,4 @@
-name: M1 locked environment and checks
+name: M1 and M2 locked environment and acceptance
 on: [push, pull_request]
 permissions:
   contents: read
@@ -19,9 +19,12 @@ jobs:
           enable-cache: false
       - name: Install the locked Python environment
         run: uv sync --locked --no-build
-      - name: Unit tests (synthetic data, no portal access)
+      - name: Record Python and linked SQLite versions
+        run: .venv/bin/python -c 'import sys, sqlite3; print(sys.version); print("SQLite", sqlite3.sqlite_version)'
+      - name: M1 regressions and M2 acceptance (synthetic data, no portal access)
         env:
           PYTHONPATH: src
+          OTTER_BROWSER_TESTS: '0'
         run: .venv/bin/python -m unittest discover -s tests -v
       - name: Compile Python and check shell syntax
         run: |

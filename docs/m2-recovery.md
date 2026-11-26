@@ -1,5 +1,9 @@
 # M2 increment F — verified backup and recovery (Issue #9)
 
+**Increment G update:** schema stays 3. See [m2-acceptance.md](m2-acceptance.md)
+for the current full acceptance matrix, test totals and host evidence. Results
+below describe the original increment F.
+
 Base: `043cdfb36749efe640fa91ebd9e9232f383be4b7` (committed Issue #8).
 Prerequisites: increments A–E / Issues #4–#8, already in this base.
 [Issue #9](https://github.com/JJandke/otter/issues/9) is the existing

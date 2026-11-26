@@ -1,14 +1,33 @@
 # OTTER — Organised Timetable Translation and Event Retrieval
 
-M1: legitimate browser authentication, persistent-session reuse and validation of
-the exact Provadis timetable API. SQLite, ICS generation, production scheduling
-and deployment belong to later milestones.
+M1 provides legitimate browser authentication, persistent-session reuse and
+validation of the exact Provadis timetable API. M2 adds normalized observations,
+conservative snapshot assessment and recoverable SQLite persistence. Event
+synchronization, ICS generation, scheduling and deployment remain later milestones.
 
-**Status — 25 November 2026:** the owner reports successful existing tests,
-logins and verify commands on Mac and Ubuntu, plus a successful rerun of the
-longtime test after approximately 24 hours. New runner/credential-enabled-fetch
-behavior still needs live acceptance. Earlier reports remain historical evidence,
-not automatic acceptance of a newer source version.
+**Status — 26 November 2026:** the owner reports increments A–F (Issues #4–#9)
+passed their tests on macOS and Ubuntu. Issue #10 adds the final composed tests
+and [M2 acceptance/operator guide](docs/m2-acceptance.md); verification of this
+increment on both hosts is still required. M1's long-duration authentication
+acceptance remains a separate gate; it is not inferred from storage tests.
+
+## M2 operators start here
+
+Read [current commands, acceptance matrix and evidence](docs/m2-acceptance.md).
+Schema is version **3**. Existing stores require explicit migration if older;
+never initialize over missing/corrupt history. Backup/restore and explicit
+quarantine expiry are in the [recovery runbook](docs/m2-recovery.md).
+
+```sh
+./scripts/otter status --directory .otter-data
+./scripts/otter check --directory .otter-data
+```
+
+These commands inspect an existing private store without authentication. Use
+init only for a genuinely new store. M2 fetch uses its own
+.otter-runtime/.m1-state profile, separate from .otter-data and M1 acceptance.
+No SQL server, ORM, Docker, scheduler or production service is installed.
+The M1 commands below keep their existing behavior and do not write M2 observations.
 
 **Normal operation must not require manual reauthentication.** Supply a private
 credential file to authorize automatic password-based login when needed. If the
@@ -77,7 +96,7 @@ OTTER_BROWSER_TESTS=1 PYTHONPATH=src .venv/bin/python -m unittest discover \
   -s tests -p test_auth_browser.py -v
 ```
 
-Normal discovery includes synthetic runner/clock/subprocess tests and skips six
+Normal discovery includes synthetic runner/clock/subprocess tests and skips eight
 opt-in Chromium fixtures. The explicit browser suite routes every request locally
 and simulates transitions; it does not execute Microsoft's real login JavaScript.
 On a fresh checkout, `./scripts/setup` installs Python 3.12.14, the locked stack
