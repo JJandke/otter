@@ -67,6 +67,26 @@ def _state_check(connection: sqlite3.Connection) -> None:
         raise StorageError("invalid_accepted_pointer")
 
 
+def _load_content(connection: sqlite3.Connection, content_id: int) -> SnapshotCandidate:
+    """Shared content verification for repository reads and independent backups."""
+    header = connection.execute("SELECT * FROM snapshot_content WHERE content_id=?", (content_id,)).fetchone()
+    if header is None:
+        raise StorageError("content_not_found")
+    if "expired_at_utc_us" in header.keys() and header["expired_at_utc_us"] is not None:
+        raise StorageError("content_expired")
+    if (header["normalization_version"], header["format_version"]) != (1, 1):
+        raise StorageError("unsupported_content_version")
+    rows = connection.execute("SELECT * FROM snapshot_event WHERE content_id=? ORDER BY ordinal",
+                              (content_id,)).fetchall()
+    if len(rows) != header["event_count"] or [r["ordinal"] for r in rows] != list(range(len(rows))):
+        raise StorageError("content_integrity_failed")
+    candidate = SnapshotCandidate(events=tuple(NormalizedEvent(*tuple(row)[2:]) for row in rows))
+    _validate_candidate(candidate)
+    if fingerprint_snapshot(candidate).sha256 != header["digest"]:
+        raise StorageError("content_integrity_failed")
+    return candidate
+
+
 def initialize_store(directory: Path, *, now: datetime | None = None) -> None:
     """Publish a fully initialized DB without replacing an existing store."""
     with storage_errors():
@@ -245,18 +265,28 @@ class Store:
         fingerprint = fingerprint_snapshot(candidate)
         with storage_errors():
             row = connection.execute(
-                "SELECT content_id FROM snapshot_content WHERE normalization_version=? AND format_version=? AND digest=?",
+                "SELECT * FROM snapshot_content WHERE normalization_version=? AND format_version=? AND digest=?",
                 (fingerprint.normalization_version, fingerprint.format_version, fingerprint.sha256)).fetchone()
             if row is not None:
-                existing = self.load_content(row[0])
-                if canonical_snapshot_bytes(existing) != canonical_snapshot_bytes(candidate):
-                    raise StorageError("content_digest_conflict")
-                return row[0]
-            cursor = connection.execute(
-                "INSERT INTO snapshot_content(normalization_version,format_version,digest,event_count,created_at_utc_us) VALUES (?,?,?,?,?)",
-                (fingerprint.normalization_version, fingerprint.format_version, fingerprint.sha256,
-                 fingerprint.event_count, _time(created_at)))
-            content_id = cursor.lastrowid
+                if "expired_at_utc_us" not in row.keys() or row["expired_at_utc_us"] is None:
+                    existing = self.load_content(row[0])
+                    if canonical_snapshot_bytes(existing) != canonical_snapshot_bytes(candidate):
+                        raise StorageError("content_digest_conflict")
+                    return row[0]
+                if row["event_count"] != fingerprint.event_count or connection.execute(
+                    "SELECT 1 FROM snapshot_event WHERE content_id=?", (row[0],)
+                ).fetchone() is not None:
+                    raise StorageError("content_integrity_failed")
+                # A genuinely new observation may restore a previously expired payload.
+                content_id = row[0]
+                connection.execute("UPDATE snapshot_content SET expired_at_utc_us=NULL WHERE content_id=?",
+                                   (content_id,))
+            else:
+                cursor = connection.execute(
+                    "INSERT INTO snapshot_content(normalization_version,format_version,digest,event_count,created_at_utc_us) VALUES (?,?,?,?,?)",
+                    (fingerprint.normalization_version, fingerprint.format_version, fingerprint.sha256,
+                     fingerprint.event_count, _time(created_at)))
+                content_id = cursor.lastrowid
             rows = json.loads(canonical_snapshot_bytes(candidate))["events"]
             connection.executemany("INSERT INTO snapshot_event VALUES (?,?,?,?,?,?,?,?,?)",
                                    ((content_id, index, *event) for index, event in enumerate(rows)))
@@ -264,20 +294,15 @@ class Store:
 
     def load_content(self, content_id: int) -> SnapshotCandidate:
         with self._read() as connection:
-            header = connection.execute("SELECT * FROM snapshot_content WHERE content_id=?", (content_id,)).fetchone()
-            if header is None:
+            return _load_content(connection, content_id)
+
+    def content_expired(self, content_id: int) -> bool:
+        with self._read() as connection:
+            row = connection.execute("SELECT expired_at_utc_us FROM snapshot_content WHERE content_id=?",
+                                     (content_id,)).fetchone()
+            if row is None:
                 raise StorageError("content_not_found")
-            if (header["normalization_version"], header["format_version"]) != (1, 1):
-                raise StorageError("unsupported_content_version")
-            rows = connection.execute("SELECT * FROM snapshot_event WHERE content_id=? ORDER BY ordinal",
-                                      (content_id,)).fetchall()
-            if len(rows) != header["event_count"] or [r["ordinal"] for r in rows] != list(range(len(rows))):
-                raise StorageError("content_integrity_failed")
-            candidate = SnapshotCandidate(events=tuple(NormalizedEvent(*tuple(row)[2:]) for row in rows))
-            _validate_candidate(candidate)
-            if fingerprint_snapshot(candidate).sha256 != header["digest"]:
-                raise StorageError("content_integrity_failed")
-            return candidate
+            return row[0] is not None
 
     def last_accepted(self) -> dict | None:
         with self._read() as connection:
@@ -320,10 +345,13 @@ class Store:
     def status(self) -> dict:
         with self._read() as connection:
             _state_check(connection)
-            return {"schema_version": migrations.check_schema(connection),
+            version = migrations.check_schema(connection)
+            return {"schema_version": version,
                     "sqlite_version": sqlite3.sqlite_version,
                     "attempt_count": connection.execute("SELECT count(*) FROM fetch_attempt").fetchone()[0],
                     "content_count": connection.execute("SELECT count(*) FROM snapshot_content").fetchone()[0],
+                    "expired_content_count": (connection.execute("SELECT count(*) FROM snapshot_content WHERE expired_at_utc_us IS NOT NULL").fetchone()[0]
+                                              if version >= 3 else 0),
                     "event_row_count": connection.execute("SELECT count(*) FROM snapshot_event").fetchone()[0],
                     "last_accepted": self._safe_attempt_metadata(self.last_accepted()),
                     "last_successful_fetch": self._safe_attempt_metadata(self.last_successful_fetch())}

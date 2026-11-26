@@ -13,7 +13,7 @@ MARKER = "otter-sqlite-private-store-v1\n"
 DATABASE = "otter.sqlite3"
 BUSY_MS = 5000
 BACKUP_SECONDS = 60
-FORBIDDEN = {".git", ".m1-state", ".provadis-m1", "profile", "profiles", ".auth",
+FORBIDDEN = {".git", ".otter-runtime", ".m1-state", ".provadis-m1", "profile", "profiles", ".auth",
              ".m1-acceptance", ".m1-login-tests", ".m1-gui", ".m1-browsers"}
 
 
@@ -46,7 +46,7 @@ def private_file(path: Path) -> None:
 
 
 def private_directory(path: Path) -> None:
-    if (any(part in FORBIDDEN for part in path.parts)
+    if (".." in path.parts or any(part in FORBIDDEN for part in path.parts)
             or any(p.is_symlink() for p in (path, *path.parents))
             or Path("/home/ubuntu/provadis_timetable") in (path, *path.parents)):
         raise StorageError("unsafe_store_directory")
@@ -65,7 +65,8 @@ def checked_directory(directory: Path, *, initialize: bool = False) -> Path:
     path = directory.expanduser().absolute()
     if initialize and not path.exists():
         # Check ancestors before creating anything, including symlinked /tmp.
-        if any(p.is_symlink() for p in (path, *path.parents)) or FORBIDDEN.intersection(path.parts):
+        if (".." in path.parts or any(p.is_symlink() for p in (path, *path.parents))
+                or FORBIDDEN.intersection(path.parts)):
             raise StorageError("unsafe_store_directory")
         if Path("/home/ubuntu/provadis_timetable") in (path, *path.parents):
             raise StorageError("unsafe_store_directory")
@@ -145,14 +146,15 @@ def sync_directory(path: Path) -> None:
 
 
 def migration_backup(connection: sqlite3.Connection, directory: Path, version: int) -> Path:
-    """Internal verified pre-migration backup; general backup/restore is Issue #9."""
+    """Publish an independently verified pre-migration copy without overwriting."""
     parent = directory / "backups"
     if not parent.exists():
         parent.mkdir(mode=0o700)
         sync_directory(directory)
     private_directory(parent)
     target = parent / f"pre-migration-v{version}-{uuid4().hex}.sqlite3"
-    reserve(target)
+    temporary = parent / f".migration-{uuid4().hex}.partial.sqlite3"
+    reserve(temporary)
     started = monotonic()
 
     def progress(_status, _remaining, _total):
@@ -160,15 +162,16 @@ def migration_backup(connection: sqlite3.Connection, directory: Path, version: i
             raise StorageError("migration_backup_timeout")
 
     try:
-        destination = connect(target)
+        destination = connect(temporary)
         try:
             connection.backup(destination, pages=128, progress=progress, sleep=0.05)
             integrity_check(destination, full=True)
         finally:
             destination.close()
-        sync_file(target)
+        sync_file(temporary)
+        os.link(temporary, target)
+        temporary.unlink()
         sync_directory(parent)
         return target
-    except BaseException:
-        target.unlink(missing_ok=True)  # Only this invocation's unpublished new file.
-        raise
+    finally:
+        temporary.unlink(missing_ok=True)  # Never remove a published backup.

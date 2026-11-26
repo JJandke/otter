@@ -26,6 +26,8 @@
 *.db-*
 .otter-data/
 .otter-runtime/
+.otter-backups/
+*.db.*
 *.ics
 *.png
 *.jpg

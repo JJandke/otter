@@ -194,10 +194,11 @@ class IngestionService:
                                            "capture_received_at_utc_us"))
         if actual != expected:
             raise IngestionError("observation_id_conflict")
-        if row["content_id"] is not None and canonical_snapshot_bytes(
-            self.store.load_content(row["content_id"])
-        ) != canonical_snapshot_bytes(capture.candidate):
-            raise IngestionError("observation_id_conflict")
+        # Expiry keeps the immutable receipt; replay never revives its payload.
+        if row["content_id"] is not None and not self.store.content_expired(row["content_id"]):
+            stored = canonical_snapshot_bytes(self.store.load_content(row["content_id"]))
+            if stored != canonical_snapshot_bytes(capture.candidate):
+                raise IngestionError("observation_id_conflict")
 
     @staticmethod
     def _stored_policy(row: dict) -> AssessmentPolicy:

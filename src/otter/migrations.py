@@ -148,6 +148,32 @@ MIGRATIONS += (Migration(2, (
 )),)
 
 
+# Do not edit migrations 1/2: expiry changes payload availability, not observations.
+MIGRATIONS += (Migration(3, (
+    """ALTER TABLE snapshot_content ADD COLUMN expired_at_utc_us INTEGER CHECK(
+        expired_at_utc_us IS NULL OR typeof(expired_at_utc_us)='integer')""",
+    """CREATE TRIGGER quarantine_expiry_guard BEFORE UPDATE OF expired_at_utc_us ON snapshot_content
+        WHEN NEW.expired_at_utc_us IS NOT NULL AND (
+            EXISTS (SELECT 1 FROM fetch_attempt WHERE content_id=OLD.content_id AND status='accepted')
+            OR EXISTS (SELECT 1 FROM snapshot_event WHERE content_id=OLD.content_id))
+        BEGIN SELECT RAISE(ABORT,'invalid_content_expiry'); END""",
+    """CREATE TRIGGER accepted_payload_delete_guard BEFORE DELETE ON snapshot_event
+        WHEN EXISTS (SELECT 1 FROM fetch_attempt WHERE content_id=OLD.content_id AND status='accepted')
+        BEGIN SELECT RAISE(ABORT,'accepted_content_retained'); END""",
+    """CREATE TRIGGER accepted_payload_update_guard BEFORE UPDATE ON snapshot_event
+        WHEN EXISTS (SELECT 1 FROM fetch_attempt WHERE content_id=OLD.content_id AND status='accepted')
+        BEGIN SELECT RAISE(ABORT,'accepted_content_retained'); END""",
+    """CREATE TRIGGER accepted_expired_insert_guard BEFORE INSERT ON fetch_attempt
+        WHEN NEW.status='accepted' AND EXISTS (SELECT 1 FROM snapshot_content
+            WHERE content_id=NEW.content_id AND expired_at_utc_us IS NOT NULL)
+        BEGIN SELECT RAISE(ABORT,'accepted_content_expired'); END""",
+    """CREATE TRIGGER accepted_expired_update_guard BEFORE UPDATE ON fetch_attempt
+        WHEN NEW.status='accepted' AND EXISTS (SELECT 1 FROM snapshot_content
+            WHERE content_id=NEW.content_id AND expired_at_utc_us IS NOT NULL)
+        BEGIN SELECT RAISE(ABORT,'accepted_content_expired'); END""",
+)),)
+
+
 def check_schema(connection: sqlite3.Connection, *, require_current: bool = True) -> int:
     if tuple(m.version for m in MIGRATIONS) != tuple(range(1, len(MIGRATIONS) + 1)):
         raise StorageError("invalid_migration_sequence")

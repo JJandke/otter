@@ -8,7 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
-BAD_PARTS = {".otter-runtime", ".otter-data", ".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
+BAD_PARTS = {".otter-backups", ".otter-runtime", ".otter-data", ".m1-acceptance", ".m1-login-tests", ".m1-state", ".provadis-m1", ".m1-gui", ".m1-browsers", "profile", "profiles", ".auth"}
 BAD_SUFFIXES = {".har", ".pem", ".key", ".passwd", ".sqlite", ".db", ".ics", ".jsonl"}
 PATTERNS = [
     re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
@@ -29,7 +29,7 @@ def main() -> int:
             bad.append(str(path))
             continue
         content = subprocess.check_output(["git", "show", f":{path.as_posix()}"])
-        if any(pattern.search(content) for pattern in PATTERNS):
+        if content.startswith(b"SQLite format 3\x00") or any(pattern.search(content) for pattern in PATTERNS):
             bad.append(str(path))
     if bad:
         print("Publication check failed; review indexed files (contents withheld):")

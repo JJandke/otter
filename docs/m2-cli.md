@@ -1,5 +1,10 @@
 # M2 increment E — M1 integration and CLI (Issue #8)
 
+**Increment F update:** current schema is version 3. The commands and results
+below describe increment E. See [backup, recovery and quarantine maintenance](m2-recovery.md)
+for Issue #9's commands, explicit upgrade and current checks. Do not initialize
+again to replace an existing store.
+
 Base: `47b613fac23887444814e838f4d6fd736a072eab` (committed Issue #7).
 Prerequisites: increments A–D, already in this base. This patch addresses
 [Issue #8](https://github.com/JJandke/otter/issues/8) in the existing M2 milestone.

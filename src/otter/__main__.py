@@ -12,10 +12,12 @@ from provadis_m1.validation import MAX_RESPONSE_BYTES, parse_candidate_response
 
 from ._store_files import StorageError
 from .assessment import AssessmentPolicy
+from .backups import backup_store, check_store, restore_backup, verify_backup
 from .ingestion import (
     FAILURE_REASONS, IngestionError, IngestionService, ObservationResult, PendingObservationError, REVIEW_REASONS,
 )
 from .m1_adapter import FetchOptions, M1Provider
+from .retention import prune_quarantine
 from .storage import Store, initialize_store, migrate_store
 
 CONFIG_REASONS = frozenset({
@@ -33,6 +35,10 @@ STORAGE_REASONS = frozenset({
     "store_write_requires_transaction", "invalid_attempt_context", "unsupported_candidate_version",
     "invalid_normalized_content", "content_digest_conflict", "content_not_found", "unsupported_content_version",
     "content_integrity_failed", "invalid_store_state", "invalid_accepted_pointer", "invalid_migration_sequence",
+    "content_expired", "invalid_content_expiry", "backup_schema_mismatch", "invalid_backup_file",
+    "backup_has_sidecars", "backup_timeout", "backup_content_mismatch", "unsafe_backup_directory",
+    "backup_observation_mismatch",
+    "restore_destination_not_empty", "invalid_retention_policy",
     "unrecognized_store_schema", "invalid_migration_history", "schema_newer_than_application",
     "schema_checksum_mismatch", "schema_migration_required", "storage_time_must_be_aware",
 })
@@ -59,7 +65,8 @@ class SafeParser(argparse.ArgumentParser):
 def parser() -> argparse.ArgumentParser:
     cli = SafeParser(description="OTTER M2 validation and persistence (no calendar/deployment)")
     commands = cli.add_subparsers(dest="command", required=True, parser_class=SafeParser)
-    for name in ("init", "migrate", "status", "schema", "fetch", "import-json", "observation", "review", "recover"):
+    for name in ("init", "migrate", "status", "schema", "fetch", "import-json", "observation", "review", "recover",
+                 "backup", "verify-backup", "restore", "check", "prune-quarantine"):
         command = commands.add_parser(name)
         command.add_argument("--directory", type=Path, default=Path(".otter-data"))
         if name in {"fetch", "import-json"}:
@@ -77,6 +84,13 @@ def parser() -> argparse.ArgumentParser:
         elif name == "import-json":
             command.add_argument("file", type=Path)
             command.add_argument("--observation-id", required=True)
+        elif name == "backup":
+            command.add_argument("--backup-directory", type=Path)
+        elif name in {"verify-backup", "restore"}:
+            command.add_argument("file", type=Path)
+        elif name == "prune-quarantine":
+            command.add_argument("--older-than-days", type=int, default=30)
+            command.add_argument("--apply", action="store_true")
         elif name in {"observation", "review"}:
             command.add_argument("observation_id")
             if name == "review":
@@ -137,6 +151,7 @@ def _preview(store: Store, service: IngestionService, observation_id: str) -> di
     result = service.result(observation_id)
     row = store.attempt(observation_id)
     return {"observation": result.safe_summary(), "baseline_attempt_no": row["baseline_attempt_no"],
+            "content_expired": store.content_expired(row["content_id"]) if row["content_id"] is not None else False,
             "event_count": row["reported_count"], "received_at_utc_us": row["received_at_utc_us"],
             "is_latest_observation": row["attempt_no"] == store.latest_attempt_no(),
             "policy_version": row["policy_version"], "minimum_future_drop": row["minimum_future_drop"],
@@ -161,6 +176,16 @@ def _execute(args) -> tuple[dict, int]:
         initialize_store(args.directory)
     elif args.command == "migrate":
         migrate_store(args.directory)
+    elif args.command == "backup":
+        return backup_store(args.directory, backup_directory=args.backup_directory), 0
+    elif args.command == "verify-backup":
+        return verify_backup(args.file), 0
+    elif args.command == "restore":
+        return restore_backup(args.file, args.directory), 0
+    elif args.command == "check":
+        return check_store(args.directory), 0
+    elif args.command == "prune-quarantine":
+        return prune_quarantine(args.directory, older_than_days=args.older_than_days, apply=args.apply), 0
     with Store(args.directory) as store:
         service = IngestionService(store, policy=policy)
         if args.command == "fetch":

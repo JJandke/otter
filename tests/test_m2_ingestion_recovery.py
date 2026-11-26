@@ -208,7 +208,7 @@ with Store(Path(sys.argv[1])) as s:
             Store(directory)
         self.assertTrue(migrate_store(directory))
         with Store(directory) as store:
-            self.assertEqual(store.status()["schema_version"], 2)
+            self.assertEqual(store.status()["schema_version"], len(migrations.MIGRATIONS))
             self.assertEqual(store.status()["content_count"], 1)
             self.assertEqual(store.load_content(store.last_accepted()["content_id"]).event_count, 2)
         backup = next((directory / "backups").glob("*.sqlite3"))

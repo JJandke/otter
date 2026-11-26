@@ -235,7 +235,7 @@ with Store(Path(sys.argv[1])) as s:
                 db.execute("UPDATE store_state SET last_accepted_attempt_no=NULL")
 
     def test_direct_sql_tampering_is_detected_on_content_read(self):
-        _, content = seed_observation(self.store)
+        _, content = seed_observation(self.store, status="suspicious")
         with self.store.transaction() as db:
             db.execute("UPDATE snapshot_event SET title='Tampered' WHERE content_id=? AND ordinal=0", (content,))
         with self.assertRaisesRegex(StorageError, "content_integrity_failed"):
