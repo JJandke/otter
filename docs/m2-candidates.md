@@ -92,7 +92,11 @@ redirect restrictions and one bounded HTTP-401 recovery remain unchanged.
 enable the new options or serialize candidates. Existing `verify` behavior is
 unchanged and does not create storage observations.
 
-## Corrected assessment requirements for Issue #5 (not implemented here)
+## Corrected assessment requirements for Issue #5
+
+The following requirements were the handoff from increment A. Increment B
+implements the pure policy and fingerprints in [m2-assessment.md](m2-assessment.md);
+storage and operational integration remain later increments.
 
 A candidate is structurally valid data, **not an accepted snapshot**. The empty
 candidate is representable so Issue #5 can quarantine it; M1's ordinary empty
@@ -110,7 +114,7 @@ The approved next increment must use these corrections to Phase A:
   and boundary-tested. No fixed semester dates or maintained semester calendar.
 - No count change itself implements cancellation; identities/counters remain M3.
 - Tests in #5 must simulate normal semester progression and a large new-semester
-  publication. These assessment behaviors are not claimed as implemented by #4.
+  publication. These assessment behaviors were not implemented by #4.
 
 ## Environment and tests
 

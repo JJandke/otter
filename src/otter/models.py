@@ -39,3 +39,13 @@ class SnapshotCandidate:
         ):
             raise TypeError("candidate_requires_immutable_event_tuple")
         object.__setattr__(self, "event_count", len(self.events))
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotFingerprint:
+    """Identity of normalized snapshot content, never a calendar event UID."""
+
+    sha256: str = field(repr=False)
+    normalization_version: int
+    format_version: int
+    event_count: int
