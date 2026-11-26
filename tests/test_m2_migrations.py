@@ -12,6 +12,7 @@ from otter.storage import Store, initialize_store, migrate_store
 
 import test_m2_storage as fixtures
 
+CURRENT = len(migrations.MIGRATIONS)
 
 class MigrationTests(unittest.TestCase):
     def setUp(self):
@@ -33,7 +34,7 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse((directory / DATABASE).exists())
         initialize_store(directory)
         with Store(directory) as store:
-            self.assertEqual(store.status()["schema_version"], 1)
+            self.assertEqual(store.status()["schema_version"], CURRENT)
 
     def test_current_migration_is_a_noop_without_a_backup(self):
         before = (self.directory / DATABASE).read_bytes()
@@ -45,14 +46,14 @@ class MigrationTests(unittest.TestCase):
         with Store(self.directory) as store:
             fixtures.seed_observation(store)
             before = store.status()
-        second = migrations.Migration(2, ("CREATE TABLE synthetic_upgrade (value INTEGER)",))
+        second = migrations.Migration(CURRENT + 1, ("CREATE TABLE synthetic_upgrade (value INTEGER)",))
         original = migrations.MIGRATIONS
         with patch("otter.migrations.MIGRATIONS", (*original, second)):
             with self.assertRaisesRegex(StorageError, "schema_migration_required"):
                 Store(self.directory)
             self.assertTrue(migrate_store(self.directory, now=fixtures.NOW))
             with Store(self.directory) as store:
-                self.assertEqual(store.status()["schema_version"], 2)
+                self.assertEqual(store.status()["schema_version"], CURRENT + 1)
                 self.assertEqual(store.status()["last_accepted"], before["last_accepted"])
         with self.assertRaisesRegex(StorageError, "schema_newer_than_application"):
             Store(self.directory)
@@ -60,7 +61,7 @@ class MigrationTests(unittest.TestCase):
     def test_pre_migration_backup_is_private_independent_and_verified(self):
         with Store(self.directory) as store:
             fixtures.seed_observation(store)
-        second = migrations.Migration(2, ("CREATE TABLE synthetic_upgrade (value INTEGER)",))
+        second = migrations.Migration(CURRENT + 1, ("CREATE TABLE synthetic_upgrade (value INTEGER)",))
         with patch("otter.migrations.MIGRATIONS", (*migrations.MIGRATIONS, second)):
             migrate_store(self.directory)
         backups = list((self.directory / "backups").glob("*.sqlite3"))
@@ -70,7 +71,7 @@ class MigrationTests(unittest.TestCase):
         with sqlite3.connect(backups[0]) as backup:
             self.assertEqual(backup.execute("PRAGMA integrity_check").fetchone()[0], "ok")
             self.assertEqual(backup.execute("PRAGMA foreign_key_check").fetchall(), [])
-            self.assertEqual(backup.execute("SELECT max(version) FROM schema_migration").fetchone()[0], 1)
+            self.assertEqual(backup.execute("SELECT max(version) FROM schema_migration").fetchone()[0], CURRENT)
             self.assertEqual(backup.execute("SELECT count(*) FROM fetch_attempt WHERE status='accepted'").fetchone()[0], 1)
             self.assertIsNone(backup.execute("SELECT name FROM sqlite_master WHERE name='synthetic_upgrade'").fetchone())
 
@@ -78,7 +79,7 @@ class MigrationTests(unittest.TestCase):
         with Store(self.directory) as store:
             fixtures.seed_observation(store)
             before = store.status()
-        broken = migrations.Migration(2, ("CREATE TABLE rollback_probe (value INTEGER)",
+        broken = migrations.Migration(CURRENT + 1, ("CREATE TABLE rollback_probe (value INTEGER)",
                                            "INSERT INTO no_such_table VALUES (1)"))
         with patch("otter.migrations.MIGRATIONS", (*migrations.MIGRATIONS, broken)):
             with self.assertRaises(StorageError):
@@ -89,23 +90,23 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(len(list((self.directory / "backups").glob("*.sqlite3"))), 1)
 
     def test_backup_failure_prevents_any_migration(self):
-        second = migrations.Migration(2, ("CREATE TABLE forbidden_upgrade (value INTEGER)",))
+        second = migrations.Migration(CURRENT + 1, ("CREATE TABLE forbidden_upgrade (value INTEGER)",))
         with patch("otter.migrations.MIGRATIONS", (*migrations.MIGRATIONS, second)), \
                 patch("otter.storage.migration_backup", side_effect=StorageError("injected_backup_failure")):
             with self.assertRaisesRegex(StorageError, "injected_backup_failure"):
                 migrate_store(self.directory)
         with Store(self.directory) as store:
-            self.assertEqual(store.status()["schema_version"], 1)
+            self.assertEqual(store.status()["schema_version"], CURRENT)
             self.assertNotIn("forbidden_upgrade", {row["name"] for row in store.schema()})
 
     def test_modified_checksum_and_newer_schema_are_not_repaired(self):
         db = self.connect()
-        db.execute("UPDATE schema_migration SET checksum=?", ("0" * 64,))
+        db.execute("UPDATE schema_migration SET checksum=? WHERE version=1", ("0" * 64,))
         for operation in (Store, migrate_store):
             with self.subTest(operation=operation), self.assertRaisesRegex(StorageError, "schema_checksum_mismatch"):
                 operation(self.directory)
-        db.execute("UPDATE schema_migration SET checksum=?", (migrations.MIGRATIONS[0].checksum,))
-        db.execute("INSERT INTO schema_migration VALUES (2,?,0)", ("0" * 64,))
+        db.execute("UPDATE schema_migration SET checksum=? WHERE version=1", (migrations.MIGRATIONS[0].checksum,))
+        db.execute("INSERT INTO schema_migration VALUES (?,?,0)", (CURRENT + 1, "0" * 64))
         with self.assertRaisesRegex(StorageError, "schema_newer_than_application"):
             Store(self.directory)
 
@@ -114,9 +115,9 @@ class MigrationTests(unittest.TestCase):
         db.execute("DELETE FROM schema_migration")
         with self.assertRaisesRegex(StorageError, "invalid_migration_history"):
             Store(self.directory)
-        db.execute("INSERT INTO schema_migration VALUES (3,?,0)", ("0" * 64,))
-        second = migrations.Migration(2, ())
-        third = migrations.Migration(3, ())
+        db.execute("INSERT INTO schema_migration VALUES (?,?,0)", (CURRENT + 2, "0" * 64))
+        second = migrations.Migration(CURRENT + 1, ())
+        third = migrations.Migration(CURRENT + 2, ())
         with patch("otter.migrations.MIGRATIONS", (*migrations.MIGRATIONS, second, third)):
             with self.assertRaisesRegex(StorageError, "invalid_migration_history"):
                 Store(self.directory)

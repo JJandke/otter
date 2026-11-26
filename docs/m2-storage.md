@@ -1,5 +1,11 @@
 # M2 increment C — SQLite repository and migrations (Issue #6)
 
+**Increment D update:** the current schema is version 2. Existing version-1
+stores must use the explicit migration command in
+[m2-ingestion.md](m2-ingestion.md) before opening. Version-1 details and test
+counts below describe the original increment C; the new guide gives current
+commands/results. Do not initialize again to replace an existing store.
+
 Base: `b2de4f42189e8874819c36384f141b0c26b9d55f` (committed Issue #5).
 Prerequisites: committed increments A and B, already included in that base.
 This patch addresses [Issue #6](https://github.com/JJandke/otter/issues/6), in the

@@ -284,6 +284,26 @@ class Store:
             row = connection.execute("SELECT a.* FROM store_state s JOIN fetch_attempt a ON a.attempt_no=s.last_accepted_attempt_no").fetchone()
             return dict(row) if row is not None else None
 
+    def attempt(self, observation_uuid: str) -> dict | None:
+        """Internal receipt metadata may include a private content digest."""
+        with self._read() as connection:
+            row = connection.execute("SELECT * FROM fetch_attempt WHERE observation_uuid=?",
+                                     (observation_uuid,)).fetchone()
+            return dict(row) if row is not None else None
+
+    def latest_attempt_no(self) -> int | None:
+        with self._read() as connection:
+            return connection.execute("SELECT max(attempt_no) FROM fetch_attempt").fetchone()[0]
+
+    @staticmethod
+    def _safe_attempt_metadata(row: dict | None) -> dict | None:
+        if row is None:
+            return None
+        # Keep private capture digests and raw stored JSON out of CLI status.
+        return {key: value for key, value in row.items()
+                if not key.startswith("capture_") and key not in
+                {"assessment_reasons", "assessment_information"}}
+
     def accepted_baseline(self) -> AcceptedBaseline | None:
         with self._read():
             row = self.last_accepted()
@@ -305,7 +325,8 @@ class Store:
                     "attempt_count": connection.execute("SELECT count(*) FROM fetch_attempt").fetchone()[0],
                     "content_count": connection.execute("SELECT count(*) FROM snapshot_content").fetchone()[0],
                     "event_row_count": connection.execute("SELECT count(*) FROM snapshot_event").fetchone()[0],
-                    "last_accepted": self.last_accepted(), "last_successful_fetch": self.last_successful_fetch()}
+                    "last_accepted": self._safe_attempt_metadata(self.last_accepted()),
+                    "last_successful_fetch": self._safe_attempt_metadata(self.last_successful_fetch())}
 
     def schema(self) -> list[dict]:
         with self._read() as connection:

@@ -115,6 +115,38 @@ MIGRATIONS = (Migration(1, (
         WHEN OLD.status='accepted' BEGIN SELECT RAISE(ABORT,'accepted_attempt_retained'); END""",
 )),)
 
+# Do not edit migration 1: existing stores retain its shipped checksum.
+MIGRATIONS += (Migration(2, (
+    "ALTER TABLE fetch_attempt ADD COLUMN capture_digest TEXT CHECK(capture_digest IS NULL OR (length(capture_digest)=64 AND capture_digest NOT GLOB '*[^0-9a-f]*'))",
+    "ALTER TABLE fetch_attempt ADD COLUMN capture_normalization_version INTEGER CHECK(capture_normalization_version IS NULL OR capture_normalization_version > 0)",
+    "ALTER TABLE fetch_attempt ADD COLUMN capture_format_version INTEGER CHECK(capture_format_version IS NULL OR capture_format_version > 0)",
+    "ALTER TABLE fetch_attempt ADD COLUMN capture_event_count INTEGER CHECK(capture_event_count IS NULL OR (typeof(capture_event_count)='integer' AND capture_event_count >= 0))",
+    """ALTER TABLE fetch_attempt ADD COLUMN capture_received_at_utc_us INTEGER CHECK(
+        (capture_digest IS NULL AND capture_normalization_version IS NULL
+         AND capture_format_version IS NULL AND capture_event_count IS NULL AND capture_received_at_utc_us IS NULL)
+        OR (capture_digest IS NOT NULL AND capture_normalization_version IS NOT NULL
+            AND capture_format_version IS NOT NULL AND capture_event_count IS NOT NULL
+            AND typeof(capture_received_at_utc_us)='integer'))""",
+    "ALTER TABLE fetch_attempt ADD COLUMN assessment_reasons TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE fetch_attempt ADD COLUMN assessment_information TEXT NOT NULL DEFAULT '[]'",
+    """ALTER TABLE fetch_attempt ADD COLUMN review_reason_code TEXT CHECK(
+        review_reason_code IS NULL OR review_reason_code IN
+            ('confirmed_empty','confirmed_duplicates','confirmed_change'))""",
+    """CREATE TRIGGER captured_receipt_immutable BEFORE UPDATE ON fetch_attempt
+        WHEN OLD.capture_digest IS NOT NULL AND (
+            NEW.capture_digest IS NOT OLD.capture_digest OR
+            NEW.capture_normalization_version IS NOT OLD.capture_normalization_version OR
+            NEW.capture_format_version IS NOT OLD.capture_format_version OR
+            NEW.capture_event_count IS NOT OLD.capture_event_count OR
+            NEW.capture_received_at_utc_us IS NOT OLD.capture_received_at_utc_us OR
+            NEW.observation_uuid IS NOT OLD.observation_uuid OR NEW.origin IS NOT OLD.origin OR
+            NEW.started_at_utc_us IS NOT OLD.started_at_utc_us OR
+            NEW.policy_version IS NOT OLD.policy_version OR
+            NEW.minimum_future_drop IS NOT OLD.minimum_future_drop OR
+            NEW.future_drop_percent IS NOT OLD.future_drop_percent)
+        BEGIN SELECT RAISE(ABORT,'captured_receipt_immutable'); END""",
+)),)
+
 
 def check_schema(connection: sqlite3.Connection, *, require_current: bool = True) -> int:
     if tuple(m.version for m in MIGRATIONS) != tuple(range(1, len(MIGRATIONS) + 1)):

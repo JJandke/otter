@@ -17,6 +17,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from otter._store_files import DATABASE, StorageError
+from otter.migrations import MIGRATIONS
 from otter.models import SnapshotCandidate
 from otter.normalization import canonical_snapshot_bytes, fingerprint_snapshot, normalize_event
 from otter.storage import Store, initialize_store, main
@@ -60,7 +61,7 @@ class StorageTests(unittest.TestCase):
 
     def test_initial_schema_connection_and_private_permissions(self):
         status = self.store.status()
-        self.assertEqual(status["schema_version"], 1)
+        self.assertEqual(status["schema_version"], len(MIGRATIONS))
         self.assertEqual((status["attempt_count"], status["content_count"]), (0, 0))
         self.assertIsNone(status["last_accepted"])
         names = {row["name"] for row in self.store.schema() if row["type"] == "table"}
