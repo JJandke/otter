@@ -1,15 +1,19 @@
 """Run with PYTHONPATH=src python -m provadis_m1; stdout is sanitized JSON only."""
 
 import argparse
+from contextlib import ExitStack
+import hashlib
 import json
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .browser import browser_run, portal_url
+from .browser import DEFAULT_PORTAL_PATH, browser_run, portal_url
+from .credentials import load_credentials
 from .errors import ConfigurationError, M1Error
 from .state import private_state
+from .navigation_log import NavigationLog
 
 
 def _positive(value: str) -> int:
@@ -27,14 +31,29 @@ def _interval(value: str) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    cli = argparse.ArgumentParser(description="Provadis M1 authentication feasibility only")
+    cli = argparse.ArgumentParser(description="OTTER M1 authentication feasibility only")
     cli.add_argument("command", choices=("login", "fetch", "verify"))
     cli.add_argument("--state-dir", type=Path, default=Path(".m1-state"))
     cli.add_argument("--bootstrap-seconds", type=_positive, default=None)
     cli.add_argument("--request-seconds", type=_positive, default=30)
     cli.add_argument("--samples", type=_positive, default=1)
     cli.add_argument("--sample-interval", type=_interval, default=0)
-    cli.add_argument("--portal-path", default="/", help="Confirmed same-origin timetable route")
+    cli.add_argument("--portal-path", default=DEFAULT_PORTAL_PATH,
+                     help="Same-origin timetable route (default: /student/schedule)")
+    cli.add_argument("--headed", action="store_true", help="Visible fetch or credential-assisted login; not verify")
+    cli.add_argument("--headless", action="store_true", help="Explicit headless mode; login requires a credential file")
+    cli.add_argument("--credentials-file", type=Path,
+                     help="Authorize automatic authentication using a private file outside the repository")
+    cli.add_argument("--decline-passkey", action="store_true",
+                     help="Decline Microsoft WebAuthn requests; requires --credentials-file")
+    cli.add_argument("--failure-pause-seconds", type=_interval, default=0,
+                     help="Keep a failed headed browser open for 0-60 seconds")
+    cli.add_argument("--keep-open-on-error", action="store_true",
+                     help="Keep failed visible browser open until window close or Ctrl+C")
+    cli.add_argument("--state-seconds", type=_positive, default=60,
+                     help="Maximum unchanged state duration in headless mode")
+    cli.add_argument("--navigation-log", action="store_true",
+                     help="Write a redacted JSONL click/navigation log in the private state directory")
     return cli
 
 
@@ -46,9 +65,34 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if any(os.environ.get(key) for key in ("DEBUG", "PWDEBUG", "SSLKEYLOGFILE")):
             raise ConfigurationError("disable_browser_debug_and_tls_key_logging")
+        if args.headless and args.headed:
+            raise ConfigurationError('credentials_require_explicit_login_mode')
+        if args.command == "login" and (
+            args.credentials_file is not None and not (args.headless or args.headed)
+            or args.headless and args.credentials_file is None
+        ):
+            raise ConfigurationError('credentials_require_explicit_login_mode')
+        if args.decline_passkey and args.credentials_file is None:
+            raise ConfigurationError('passkey_decline_requires_credentials')
+        if args.command == "verify" and args.headed:
+            raise ConfigurationError("verify_requires_headless_browsers")
+        credentials = load_credentials(args.credentials_file) if args.credentials_file else None
+        visible = args.headed or (args.command == "login" and credentials is None)
+        if args.keep_open_on_error and (not visible or args.command == "verify"):
+            raise ConfigurationError("keep_open_requires_visible_browser")
+        if args.failure_pause_seconds and (not visible or args.command == 'verify'):
+            raise ConfigurationError('failure_pause_requires_headed_login_or_fetch')
         portal_url(args.portal_path)
-        with private_state(args.state_dir) as profile:
-            interactive = args.command == "login"
+        if args.portal_path != DEFAULT_PORTAL_PATH:
+            raise ConfigurationError("only_captured_timetable_route_supported")
+        if args.headed and args.command == "verify":
+            raise ConfigurationError("verify_requires_headless_browsers")
+        with private_state(args.state_dir) as profile, ExitStack() as stack:
+            trace = stack.enter_context(NavigationLog(profile.parent)) if args.navigation_log else None
+            if trace:
+                result["navigation_log"] = trace.path.name
+            result["state_id"] = hashlib.sha256(str(profile.resolve()).encode()).hexdigest()[:12]
+            interactive = args.command == "login" and credentials is None
             if interactive:
                 print(
                     "Sign in in the dedicated Chromium window, then open your timetable. "
@@ -66,15 +110,33 @@ def main(argv: list[str] | None = None) -> int:
                     samples=max(2, args.samples) if args.command == "verify" else args.samples,
                     sample_interval=args.sample_interval,
                     portal_path=args.portal_path,
+                    headed=args.headed,
+                    trace=trace,
+                    credentials=credentials,
+                    decline_passkey=args.decline_passkey,
+                    failure_pause_seconds=args.failure_pause_seconds,
+                    keep_open_on_error=args.keep_open_on_error,
+                    state_seconds=args.state_seconds,
                 ))
                 # Retain sanitized evidence of earlier runs if a later run fails.
                 result["browser_runs"] = runs.copy()
             result.update({"ok": True, "category": "validated_snapshot", "browser_runs": runs})
+            credential_attempted = any(
+                any(run.get("diagnostics", {}).get("auth_actions", {}).get(step, 0) > 0
+                    for step in ("email", "password")) for run in runs
+            )
+            result["credential_attempted"] = credential_attempted
+            result["credential_submission_used"] = any(
+                any(run.get("diagnostics", {}).get("credential_submissions_observed", {}).values())
+                for run in runs
+            )
             if args.command == "verify":
-                result["restart_reuse_demonstrated"] = True
+                result["restart_reuse_demonstrated"] = not credential_attempted
                 result["unattended_retrieval_demonstrated"] = True
     except M1Error as error:
         result.update({"category": error.category, "reason": error.reason})
+        if error.diagnostics is not None:
+            result["diagnostics"] = error.diagnostics
         code = int(error.code)
     except OSError:
         result.update({"category": "configuration", "reason": "local_io_failed"})

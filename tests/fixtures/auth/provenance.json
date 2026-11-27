@@ -1,0 +1,77 @@
+[
+  {
+    "source": "DryLogin/10_Hochschulportal.html",
+    "sha256": "88f847005e90d5db00ac8397e34b396c0f285d2d51a96ea07074f7b872733030",
+    "fixture": "DryLogin-10_Hochschulportal.html"
+  },
+  {
+    "source": "DryLogin/11_Hochschulportal.html",
+    "sha256": "5e9c816d778e1ee30a24e9d296b530b93753c2f0a1ad5ec0b239d2ba20e73020",
+    "fixture": "DryLogin-11_Hochschulportal.html"
+  },
+  {
+    "source": "DryLogin/1_Hochschulportal.html",
+    "sha256": "9827dab78e34ed6c5a86d97be780fcad610e9d24dae109bf3bb313587de9d8c5",
+    "fixture": "DryLogin-1_Hochschulportal.html"
+  },
+  {
+    "source": "DryLogin/2_Hochschulportal.html",
+    "sha256": "ebe33ecb5ccd8b11092c8f85b10fa20f58b378d775c21ce2f01db8f9ff8c63b0",
+    "fixture": "DryLogin-2_Hochschulportal.html"
+  },
+  {
+    "source": "DryLogin/3_Anmeldung.html",
+    "sha256": "105a60e06734dcb7c56bfdaa40747a1b669005b26b3274e7daa8eba3111b25b2",
+    "fixture": "DryLogin-3_Anmeldung.html"
+  },
+  {
+    "source": "DryLogin/4_SignIn-EMail.html",
+    "sha256": "ce67f780e2ed55492eedef58dabef159bb98a97fdf642124b14f5dea7c2e42e2",
+    "fixture": "DryLogin-4_SignIn-EMail.html"
+  },
+  {
+    "source": "DryLogin/6_SignIn-Password.html",
+    "sha256": "6f46d2ae851443f6b91c0e565666f56885fd33c9edfa393868b3a5d9a59e7125",
+    "fixture": "DryLogin-6_SignIn-Password.html"
+  },
+  {
+    "source": "DryLogin/7_SignIn-EnterPassword.html",
+    "sha256": "afa0b1ca5032e2639a3d1c7314f20f69b2060a81c579cbbb975d52a06726072c",
+    "fixture": "DryLogin-7_SignIn-EnterPassword.html"
+  },
+  {
+    "source": "DryLogin/8_SignIn-Store.html",
+    "sha256": "6b42faefeb0327bfe3b0c57214c5dbc10f8138099f5a03a7426ff3cd3a62dffb",
+    "fixture": "DryLogin-8_SignIn-Store.html"
+  },
+  {
+    "source": "DryLogin/9_Hochschulportal.html",
+    "sha256": "8338c61a6576aa81893cfcba39ed1d0d552860da91a5b6989f268e970597e16b",
+    "fixture": "DryLogin-9_Hochschulportal.html"
+  },
+  {
+    "source": "WetLogin/1_Hochschulportal.html",
+    "sha256": "9b53cf8be7b008f1de2a8ca010d5e88d4f3db471d585a2b8ab3e6e5fdce1b605",
+    "fixture": "WetLogin-1_Hochschulportal.html"
+  },
+  {
+    "source": "WetLogin/2_Hochschulportal.html",
+    "sha256": "ebe33ecb5ccd8b11092c8f85b10fa20f58b378d775c21ce2f01db8f9ff8c63b0",
+    "fixture": "WetLogin-2_Hochschulportal.html"
+  },
+  {
+    "source": "WetLogin/3_Hochschulportal.html",
+    "sha256": "08423544561458df8840e11c90c094a58ebb3e5291a1e4261e41bf721096bc24",
+    "fixture": "WetLogin-3_Hochschulportal.html"
+  },
+  {
+    "source": "WetLogin/4_Hochschulportal.html",
+    "sha256": "1e2eca25ec298d81650bd924fb6b1bf99c40725d020aed87b3f304facc5eb5c5",
+    "fixture": "WetLogin-4_Hochschulportal.html"
+  },
+  {
+    "source": "WetLogin/5_Hochschulportal.html",
+    "sha256": "0293fabdc0e20a83add9a4a562324c0ac5e88a117259a9d5556b66eccaee11f9",
+    "fixture": "WetLogin-5_Hochschulportal.html"
+  }
+]

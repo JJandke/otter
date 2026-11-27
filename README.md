@@ -1,109 +1,102 @@
-# Provadis timetable — M1
+# OTTER — Organised Timetable Translation and Event Retrieval
 
-An isolated Python prototype for **authentication feasibility**, with no calendar,
-database, public endpoint, or production job. It leaves the old application and
-existing Nginx/systemd configuration alone.
+M1: legitimate browser authentication, persistent-session reuse and validation of
+the exact Provadis timetable API. SQLite, ICS generation, production scheduling
+and deployment belong to later milestones.
 
-**Status:** offline tests pass on Python 3.12. Live authentication, session restart
-reuse, unattended access, and server behavior have not yet been demonstrated.
-Do not treat M1 as accepted until the live checks in
-[docs/feasibility.md](docs/feasibility.md) have recorded successful results.
+**Status — 25 November 2026:** the owner reports successful existing tests,
+logins and verify commands on Mac and Ubuntu, plus a successful rerun of the
+longtime test after approximately 24 hours. New runner/credential-enabled-fetch
+behavior still needs live acceptance. Earlier reports remain historical evidence,
+not automatic acceptance of a newer source version.
 
-## Local setup (macOS / PyCharm)
+**Normal operation must not require manual reauthentication.** Supply a private
+credential file to authorize automatic password-based login when needed. If the
+live tenant requires an interactive MFA/CAPTCHA/other unsupported challenge,
+unattended operation remains unproven and M1 cannot be accepted under this policy.
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git.
-Then, from this project directory:
+Read [the current M1 runner, commands and complete acceptance checklist](docs/m1-acceptance.md).
+Earlier [authentication investigation](docs/m1-authentication-rebuild.md) and
+[SSO-return diagnosis](docs/m1-sso-return-race.md) explain the navigation evidence.
+
+## Application commands
 
 ```sh
-./scripts/setup
+./scripts/m1 fetch --credentials-file "$HOME/.config/otter/credentials.env" \
+  --decline-passkey --navigation-log
+./scripts/m1 verify --credentials-file "$HOME/.config/otter/credentials.env" \
+  --decline-passkey --navigation-log
+```
+
+Healthy sessions skip credential forms. Required login forms use the configured
+file automatically. `login` can also start an explicit assisted or interactive
+session. No `.env` is searched for or sourced implicitly; the owner-only file must
+be outside the checkout and contain `OTTER_USERNAME` and `OTTER_PASSWORD`.
+Passwords are never passed as command-line values or saved in reports.
+
+Omit `--credentials-file` for strict session-reuse tests. `verify` always uses two
+headless browser lifetimes with at least two validated direct requests each. Its
+`restart_reuse_demonstrated` is false if credentials were attempted.
+Credential attempts are reported separately as `credential_attempted`; matching
+form POST observations set `credential_submission_used`. These are distinct from
+API validation. See [detached-submit recovery and retesting](docs/m1-detached-submit.md).
+
+The opt-in `--decline-passkey` behavior rejects WebAuthn requests on specifically
+allowlisted Microsoft pages, supplying no authenticator or MFA response. It
+requires an explicit credential file. Unknown screens and failed authentication
+remain bounded, nonzero failures. HTTP 403 does not initiate a login loop.
+
+## Finite live acceptance tests
+
+```sh
+./scripts/m1-acceptance smoke --credentials-file "$HOME/.config/otter/credentials.env" \
+  --decline-passkey
+./scripts/m1-acceptance active --credentials-file "$HOME/.config/otter/credentials.env" \
+  --decline-passkey --duration-hours 26 --interval-seconds 3600
+./scripts/m1-acceptance idle --credentials-file "$HOME/.config/otter/credentials.env" \
+  --decline-passkey --idle-hours 25
+```
+
+These are real sign-ins/API calls when explicitly started. Each test creates new
+private profiles and preserves existing ones. Reports are under `.m1-acceptance/`,
+excluded from Git and protected by the publication guard. The runner stops on the
+first unexpected failure. It uses the chosen Python interpreter for each fresh
+application process, has finite child deadlines, locks waiting profiles, records
+actual timing and distinguishes reauthentication from cookie-only reuse.
+
+The shell wrappers use `.venv/bin/python`. To preserve the current Mac's 3.14
+longevity environment while testing the declared 3.12 target, use the separate
+3.12 interpreter with `PYTHONPATH=src python -m provadis_m1.acceptance ...` as shown
+in the runbook. Do not mix runtimes within a measured series.
+
+## Offline checks and browser fixtures
+
+```sh
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+OTTER_BROWSER_TESTS=1 PYTHONPATH=src .venv/bin/python -m unittest discover \
+  -s tests -p test_auth_browser.py -v
 ```
 
-The setup pins Python 3.12.14 and all four runtime packages in
-`requirements.lock`. This is a pip-compatible lockfile used by `uv pip sync`;
-there is no generated native `uv.lock` yet. The lockfile pins versions but does
-not contain distribution hashes. See [the environment notes](docs/environment.md)
-for the remaining reproducibility checks. Use `./scripts/m1`, not `uv run`,
-which would create a different native project lock.
+Normal discovery includes synthetic runner/clock/subprocess tests and skips six
+opt-in Chromium fixtures. The explicit browser suite routes every request locally
+and simulates transitions; it does not execute Microsoft's real login JavaScript.
+On a fresh checkout, `./scripts/setup` installs Python 3.12.14, the locked stack
+and Chromium and enables the publication hook. Preserve an ongoing test environment.
 
-In PyCharm, open this directory and select `.venv/bin/python` as the interpreter.
-Use this directory as the working directory. Either run `scripts/m1` in the
-terminal, or configure a Python module run for `provadis_m1` with `src` marked as
-Sources Root. No credentials belong in run configurations or environment files.
+## State and diagnostics
 
-## Authenticate, then test reuse
+Use a dedicated `.m1-state` or `.provadis-m1` directory consistently. It holds an
+exclusive profile lock, including during debug inspection. Every successful
+application command validates the exact API response; reaching a page is insufficient.
+The portal obtains authorization; OTTER holds the exact GET's observed successful
+Bearer header in memory and replays that GET without redirects or token-cache access.
 
-```sh
-./scripts/m1 login
-./scripts/m1 fetch
-./scripts/m1 verify
-```
+`--navigation-log` writes allowlisted JSONL events. Failures create private state
+reports and, when available, PNGs of sanitized control-layout projections. Original
+page pixels, QR codes, input values, raw messages and timetable data are omitted.
+`--keep-open-on-error` retains a failed visible browser for local inspection.
 
-`login` opens a **dedicated Chromium profile**, waits up to 15 minutes for you to
-sign in and open your timetable, then performs and validates a direct API GET.
-Enter your password/MFA only in the portal window. The browser closes gracefully
-after validation. Never paste credentials, codes, cookies, tokens, or HAR files
-into chat or issues.
-
-`fetch` starts a headless browser using that profile, opens the portal once to let
-its own authentication code run, captures the authorization header from the exact
-timetable GET, and then makes a direct API request without query parameters or a
-body. It does not export or independently renew refresh tokens.
-
-`verify` does this in **two separate headless browser lifetimes**, making at least
-two direct requests in each. Success demonstrates short-term restart reuse and
-unattended retrieval on that host. It does not establish long-term validity.
-
-If the root page does not automatically request the timetable, supply the actual
-same-origin route in **each** command, for example:
-
-```sh
-# Replace the example route with the route observed in your dedicated browser.
-./scripts/m1 fetch --portal-path '/#/example/timetable'
-```
-
-The route is not established yet. Do not use an OAuth callback URL, query string,
-authorization code, or token-bearing fragment. Only simple paths/hash routes are
-accepted. There is no click-selector automation guessing how the portal works.
-
-## Results and failures
-
-Stdout contains one JSON summary, including counts and UTC completion time.
-Event contents, user identity, credentials, raw upstream messages, and exception
-details are omitted. The browser profile is `.m1-state/profile`, mode 0700,
-excluded from Git. Only one process can use it at a time.
-
-| Exit | Category | Meaning |
-| --- | --- | --- |
-| 0 | `validated_snapshot` | Every requested direct API sample passed validation |
-| 2 | `authentication` | Missing Bearer request, HTTP 401/403, or unexpected redirect |
-| 3 | `network` | Portal navigation, API transport, or response read failed |
-| 4 | `invalid_response` | Wrong status/content/schema/dates, `ok != true`, or count mismatch |
-| 5 | `suspicious_response` | Structurally valid but empty timetable; no successful update |
-| 6 | `configuration` | Unsafe/locked state, missing dependencies/browser/display, local error |
-| 7 | `service` | HTTP 429 or 5xx; upstream temporarily unavailable |
-| 130 | `interrupted` | Operator stopped the run |
-
-HTTP 403 may mean insufficient permissions rather than expired login. A missing
-observed request may mean the wrong portal route rather than expired login.
-There are no automatic login loops. Every failed/suspicious result exits nonzero;
-no timetable or calendar data is ever written in M1.
-
-Validation requires HTTP 200, JSON, the confirmed envelope, strict `ok: true`, a
-list with matching integer `count`, and nonempty titles plus valid offset-aware
-start/end times with end after start. Building/room fields must exist but may be
-null or empty. Extra fields are accepted; undocumented schema differences fail
-closed and require review. Nonempty valid JSON still cannot prove that the
-university returned a semantically complete timetable.
-
-## Next steps
-
-- [Authentication and reauthentication](docs/authentication.md)
-- [Safe SSH-only server testing](docs/server-testing.md)
-- [Feasibility assessment and acceptance evidence](docs/feasibility.md)
-- [Environment and publishing](docs/environment.md)
-
-Before publishing, run `python3 scripts/check_public_tree.py` after staging the
-intended files and review `git diff --cached`. Keep all browser profiles, raw
-responses, HARs, screenshots, VNC passwords, and session backups outside Git.
-Setup enables the versioned pre-commit guard using repository-local Git config.
+Application exits: 0 validated snapshot; 2 authentication; 3 network;
+4 invalid response; 5 inconclusive empty timetable; 6 configuration;
+7 upstream service; 8 navigation/bootstrap; 130 interrupted.
+Runner exits are separately documented in the acceptance runbook.

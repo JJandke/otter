@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$project_dir"
+export PYTHONPATH="$project_dir/src"
+exec "$project_dir/.venv/bin/python" -m provadis_m1.acceptance "$@"

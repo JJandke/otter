@@ -2,6 +2,7 @@
 .m1-state/
 .provadis-m1/
 .m1-gui/
+.m1-browsers/
 **/profile/
 **/profiles/
 **/browser-profile/
@@ -15,6 +16,7 @@
 *.key
 *.passwd
 .env
+*.env
 .env.*
 !.env.example
 *.log
@@ -25,6 +27,8 @@
 *.png
 *.jpg
 *.webm
+*.patch
+*.save
 trace*.zip
 downloads/
 artifacts/
@@ -39,3 +43,9 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Isolated disposable authentication experiments
+.m1-login-tests/
+
+# Private finite acceptance runs and their browser profiles
+.m1-acceptance/

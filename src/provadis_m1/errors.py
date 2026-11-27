@@ -10,6 +10,7 @@ class ExitCode(IntEnum):
     SUSPICIOUS_RESPONSE = 5
     CONFIGURATION = 6
     SERVICE = 7
+    BOOTSTRAP = 8
 
 
 class M1Error(Exception):
@@ -17,12 +18,18 @@ class M1Error(Exception):
         self.category = category
         self.code = code
         self.reason = reason
+        self.diagnostics: dict | None = None
         super().__init__(reason)
 
 
 class AuthenticationError(M1Error):
     def __init__(self, reason: str = "authentication_required"):
         super().__init__("authentication", ExitCode.AUTHENTICATION, reason)
+
+
+class BootstrapError(M1Error):
+    def __init__(self, reason: str = "portal_did_not_issue_timetable_bearer"):
+        super().__init__("bootstrap", ExitCode.BOOTSTRAP, reason)
 
 
 class NetworkError(M1Error):

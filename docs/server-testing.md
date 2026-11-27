@@ -25,16 +25,27 @@ and run dependency installation deliberately because it may use sudo:
 ```sh
 cd /home/ubuntu/provadis-m1
 uv venv --python 3.12.14
-uv pip sync --python .venv/bin/python requirements.lock
+uv sync --locked --python .venv/bin/python
 # Installs OS libraries required by the pinned Playwright browser; review sudo output.
 .venv/bin/python -m playwright install-deps chromium
 .venv/bin/python -m playwright install chromium
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python scripts/check_browser.py
 ```
 
 Ubuntu 22.04 is in Playwright's documented supported Linux family. Browser/kernel
 sandbox availability and actual `franz` packages still need testing. Do not solve
 a launch failure by running Chromium as root or adding `--no-sandbox`.
+
+## Optional headless initial login
+
+After a successful browser smoke check, the explicit credential-file feature can
+attempt Microsoft email/password login without a display. Follow
+[headless-login.md](headless-login.md). The file stays outside the checkout and
+requires owner-only access. Normal `fetch`/`verify` still use browser state only.
+If MFA/passkeys, account selection or an unsupported prompt prevents completion,
+a supported interactive method remains necessary; credentials alone cannot
+establish the missing additional factor. No headless success is assumed.
 
 ## Temporary graphical access via an SSH tunnel
 

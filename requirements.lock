@@ -1,8 +1,0 @@
-# Fully pinned runtime dependency closure. Install using:
-# uv pip sync requirements.lock
-# No platform URLs: resolves wheels for macOS arm64 and Ubuntu x86-64/arm64.
-# Native uv.lock generation/check remains pending network access and uv availability.
-playwright==1.62.0
-greenlet==3.5.5
-pyee==13.0.1
-typing-extensions==4.16.0

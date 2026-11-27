@@ -1,5 +1,25 @@
 # Authentication and reauthentication
 
+> Current status and policy (25 November 2026): see [M1 acceptance](m1-acceptance.md).
+> The owner reports successful Mac/Ubuntu checks and a successful ~24-hour rerun.
+> Explicit credential-enabled fetch/verify and the finite test runner are now
+> implemented; their new live acceptance is pending. Manual reauthentication is
+> not an acceptable normal operating policy. The older observations below are
+> retained as historical evidence and are superseded where behavior differs.
+
+
+For a successful login followed by failed fetch/verify, first follow
+[restart diagnosis](development.md). A missing observed timetable request now
+uses category `bootstrap`, exit 8, with safe diagnostics. It does not establish
+that login expired. Keep the existing profile intact while investigating.
+
+## Credential-assisted headless login
+
+The owner requested an opt-in initial server-login attempt without a GUI. It is
+part of M1 and is separate from normal fetch/verify. See [headless-login.md](headless-login.md)
+for the protected external file, supported forms and failure handling. This is
+not an independent OAuth integration and does not bypass MFA/passkeys.
+
 ## What this prototype does
 
 1. Acquire a nonblocking process lock on a private, marked M1 state directory.
@@ -31,8 +51,12 @@ MFA. A successful direct request closes the window and prints sanitized JSON.
 
 If the portal requires a particular route, identify its simple path/hash route in
 this browser and use `--portal-path` in subsequent commands. OAuth callback URLs
-and URLs containing parameters are unsuitable. The default root route is an
-unverified assumption, not a confirmed portal navigation sequence.
+and URLs containing parameters are unsuitable. The default is `/student/schedule`.
+The owner confirmed that this route redirects to the landing page before the
+student flow is started. OTTER now tries the bounded navigation described in
+[student-entry testing](student-entry.md); the owner demonstrated headless fetch and restart reuse on 24 November 2026.
+See [the evidence and remaining gates](feasibility.md); longevity and server
+compatibility remain open.
 
 Then run `./scripts/m1 verify`. Both headless browser lifetimes must make valid,
 nonempty direct requests. Preserve the sanitized result locally if desired:
@@ -78,8 +102,11 @@ are observations, not proof of a particular grant type, renewal, SSO, or MFA.
 
 The server uses the tunneled GUI procedure in [server-testing.md](server-testing.md).
 Do not copy a macOS profile or tokens to Linux; portability is not established and
-may depend on OS key storage. No passwords or refresh tokens are accepted through
-chat, CLI flags, environment files, or source configuration.
+may depend on OS key storage. Never send credentials through chat or put their
+values in CLI flags or source configuration. Passwords may be read only for the
+explicit headless-login option from an owner-only external credential file. It
+is never sourced or exported into process environment variables. Refresh tokens
+are never accepted from external files or arguments.
 
 If a profile is unusable, leave it private for diagnosis or retire it with a
 deliberate local operator action, then authenticate in a fresh dedicated M1 state

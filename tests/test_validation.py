@@ -56,7 +56,7 @@ class ValidationTests(unittest.TestCase):
             validate_response(200, "application/json", (FIXTURES / "failure.json").read_bytes())
 
     def test_required_fields_and_strict_envelope_types(self):
-        for key in self.payload:
+        for key in ("ok", "data", "count"):
             modified = copy.deepcopy(self.payload)
             del modified[key]
             with self.subTest(missing=key), self.assertRaises(InvalidResponse):
@@ -108,3 +108,8 @@ class ValidationTests(unittest.TestCase):
         self.payload["data"][0] = None
         with self.assertRaises(InvalidResponse):
             self.validate(self.payload)
+
+    def test_optional_message_fields_are_not_required_for_success(self):
+        del self.payload["message"]
+        del self.payload["message2"]
+        self.assertEqual(self.validate(self.payload).event_count, 2)

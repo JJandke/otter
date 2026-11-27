@@ -1,105 +1,109 @@
 # Environment, verification, and publishing
 
-## Environment prepared here
+## Current state (24 November 2026)
 
-The starting workspace was empty and was not a Git repository. A new isolated
-repository was initialized in `provadis-timetable` on branch `main`.
+The owner works in `/Users/Johannes/Downloads/otter` on
+`fix/m1-session-diagnostics`; the configured repository is
+`https://github.com/JJandke/otter`. No new repository or remote needs creating.
+`LICENSE` contains GPL version 3; this cleanup does not change the license.
 
-The shell provided Git and Python 3.14, but no uv, Python 3.12 executable on PATH,
-or GitHub CLI. A bundled Python **3.12.14** was subsequently located and used to
-create this project's ignored `.venv`. Standard-library unit tests run under that
-interpreter; this path is machine-specific and is not required by project code.
+The declared interpreter target is Python 3.12, pinned to **3.12.14** in
+`.python-version`. Read-only inspection of the owner's current `.venv/bin/python`
+reported **3.14.7**. The successful local headless fetch/restart results do not
+establish live Python 3.12 compatibility. They remain valid short-term evidence
+for the current working environment.
 
-Shell network/DNS access is blocked in this execution session. A PyPI HTTPS
-connection and SSH to `franz` both failed at hostname resolution. No server login,
-production inspection, or configuration change occurred. No GitHub remote has
-been published from this session.
+The assistant tests isolated source copies with a separate Python 3.12.14
+interpreter. Earlier notes describing unavailable tools, offline package caches
+or unsuccessful browser launches describe the initial scratch environment, not
+the current owner's working environment. They are not current acceptance results.
+No server authentication or production configuration change has been performed
+by the assistant.
 
-A read-only check of GitHub's repository-creation page reached a sign-in form.
-No GitHub session was available in that browser, and no repository was created.
+## Preserve the ongoing longevity experiment
 
-The local connection subsequently dropped and was restored. After reconnecting,
-all **31 unit tests passed under Python 3.12.14**, including the final portal
-renewal handling. Python compilation, shell syntax checks, and Git whitespace
-checks also passed. Shell access to PyPI still failed at hostname resolution;
-reconnecting the local workspace did not change its network restrictions.
+Do not recreate the current `.venv`, reinstall Chromium, rerun setup, switch OS
+account, or move the browser profile while measuring session longevity. The setup
+script now reads `.python-version` for both creation and validation, and exits 6
+without replacing an incompatible existing venv. This is intentional.
 
-Playwright 1.62.0, greenlet 3.5.5, pyee 13.0.1, and typing-extensions 4.16.0 were
-available in local package caches. An **outside-project temporary Python 3.14**
-environment was used to check those cached packages. The available greenlet wheel
-was for Python 3.14, so it was not installed into the Python 3.12 environment.
-The offline Chromium smoke attempt did not successfully launch/operate a browser.
-It is not evidence of either portal compatibility or incompatibility.
+Source patches and offline unit tests do not authenticate. They can be applied
+without touching `.m1-state`. A fresh target-version checkout must have its own
+venv and its own dedicated browser profile. Treat any interactive login or new
+runtime/browser as a separate measurement series; do not silently combine it with
+the original 72-hour evidence.
 
 ## Reproducibility boundary
 
-`requirements.lock` pins the complete runtime dependency closure. `uv pip sync`
-is the intended installation mechanism. This pip-compatible format was chosen
-because uv and network resolution are unavailable here; no native `uv.lock` has
-been fabricated. The environment is prepared, but dependency installation into
-the Python 3.12 venv and real browser verification are still outstanding.
+The native `uv.lock` was generated with uv 0.13.9 using the public PyPI registry.
+It pins Playwright 1.62.0, greenlet 3.5.5, pyee 13.0.1, and typing-extensions
+4.16.0, retaining the prior runtime versions and adding distribution hashes.
+The old `requirements.lock` has been removed. `uv sync --locked` is the installation
+mechanism; the lock must match `pyproject.toml`. The virtual project is still run
+with the existing `PYTHONPATH=src` wrapper, without adding packaging or a CLI API.
 
-Remaining environment checks on a network-enabled terminal:
+A fresh Python 3.12.14 environment was successfully synchronized in an isolated
+macOS source copy; the 78 offline tests passed there. This is clean dependency
+installation evidence, not university authentication evidence. The existing
+Python 3.14 environment remains untouched. Chromium downloaded separately, but
+its smoke launch exited before page validation in the assistant session. A local
+browser smoke pass remains unproven; reproduce it with `scripts/check_browser.py`.
 
-1. Install uv from its [official instructions](https://docs.astral.sh/uv/getting-started/installation/).
-2. Run `./scripts/setup`, then the offline unit tests from the README.
-3. Verify installation under Python 3.12 on macOS and Ubuntu 22.04. In particular,
-   confirm compatible wheels for the pinned greenlet version and server architecture.
-4. Prefer replacing the pip-compatible lock with a uv-generated `uv.lock` once
-   resolution is available. Resolve all four current pins, review the diff,
-   commit the generated lock, and switch setup/CI instructions together to
-   `uv sync --locked`. Retain one authoritative runtime lock; do not leave two
-   independently changing sets of pins.
-5. Check official package hashes/distribution provenance when generating that
-   native lock; the current lock has exact versions but no artifact hashes.
+Remaining work:
 
-The version pins reflect the locally available packages, not a completed security
-audit. Playwright installs a version-matched browser using its own installer;
-that browser is outside Git. Do not change the browser independently without
-rerunning authentication feasibility checks.
+1. Have the owner reproduce the fresh Python 3.12 installation and smoke checks
+   in a separate checkout. Keep its profile separate from the longevity series.
+2. Verify the updated GitHub Actions run on Ubuntu 22.04. It now installs the
+   locked dependencies and Chromium, runs the offline suite and a sandboxed browser
+   smoke check, and scans indexed files. It receives no university credentials.
+   A workflow file in Git is not evidence of a passing GitHub-hosted job.
+3. Repeat live authentication/restart tests in the target-version environment and
+   on `franz`. A fresh install or browser smoke pass cannot establish login reuse.
+
+Do not upgrade dependencies or browsers as part of this cleanup. The successful
+working environment remains available until the replacement is verified. See
+[m1-cleanup.md](m1-cleanup.md) for the current patch workflow and
+[server-testing.md](server-testing.md) for the isolated Ubuntu experiment.
 
 ## Automated checks
+
+From the repository root, in Terminal, PyCharm's terminal, or Ubuntu:
 
 ```sh
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 .venv/bin/python -m compileall -q src scripts tests
-git add README.md docs scripts src tests .github .gitignore
+sh -n scripts/setup scripts/m1 .githooks/pre-commit
+git diff --check
+```
+
+With the credential-assisted login feature expect **99 tests and OK**. The setup tests use temporary
+synthetic checkouts, fake uv/Git/browser commands and the test interpreter. They
+check that matching environments are reused, mismatches stop before installation,
+new environments use the configured version, and unusable environments are
+preserved. A failed locked sync stops before browser installation or Git changes.
+No packages or browsers are installed by these tests. They run on the
+current Python 3.14 environment too; this does not broaden the supported target.
+
+The other tests use synthetic fixtures and mocks for API validation,
+authentication/network error classification, navigation and state protection.
+None needs university credentials or a network connection. PyCharm GUI setup is
+explained in [development.md](development.md).
+
+Before committing, stage explicit reviewed paths, then run:
+
+```sh
 .venv/bin/python scripts/check_public_tree.py
 git diff --cached --check
 git diff --cached
 ```
 
-The tests use wholly synthetic fixtures, request mocks, and private temporary
-directories. No test requires a university account or network connection.
-GitHub Actions runs these checks on Ubuntu 22.04 / Python 3.12.14 once published.
-Its workflow does not receive credentials or try to authenticate.
+The guard scans indexed files; it is not a comprehensive secret or personal-data
+scanner. Review the staged diff yourself. Setup enables `.githooks` via local Git
+configuration; hooks do not replace review. Leave `scripts/setup.save`, browser
+state, downloaded patches and diagnostic logs unstaged.
 
-The publication guard scans indexed file names and content, without printing
-matches. It recognizes common private artifacts and token/key patterns; it is
-not a comprehensive secret detector. Review all new/changed files before pushing.
-If a credential was ever committed, removing it from the current tree is
-insufficient: revoke it and remediate Git history before making it public.
-The local repository uses `core.hooksPath=.githooks`; setup enables the same
-pre-commit check in future clones. Hooks can be bypassed and do not replace review.
-
-## New public GitHub repository
-
-The intended suggested repository name is `provadis-timetable`. The local commits
-are ready for review. If GitHub CLI is available and authenticated in your own
-terminal, from the repository root:
-
-```sh
-python3 scripts/check_public_tree.py
-# Uses the currently authenticated GitHub account; verify it first.
-gh auth status
-gh repo create provadis-timetable --public --source=. --remote=origin --push
-```
-
-If that name already exists, do not overwrite or attach to it blindly. Choose a
-fresh name. If a new empty repository is created through GitHub's website instead,
-use its exact SSH URL for `git remote add origin ...`, then `git push -u origin main`.
-Never put a GitHub token in a URL, command argument, file, or chat.
-
-Do not initialize the remote with an unrelated README or force-push over any
-existing repository. No license choice has been assumed; choose one deliberately
-before inviting external reuse.
+Before pushing, inspect `git status`, `git log --oneline main..HEAD`, and
+`git remote -v`. Push the issue branch when ready, not a new repository. Merge to
+`main` after review and the agreed acceptance gates; pushing and merging do not
+constitute production deployment. See [feasibility.md](feasibility.md) for the
+remaining M1 gates. Do not reset or clean away private state to change branches.
